@@ -87,7 +87,7 @@ include("Gmsh/2D/plate_inclusion/generate_transfinite_plate_with_inclusions.jl")
 include("Gmsh/2D/Simple plate/plaque.jl")
 include("Gmsh/2D/Simple plate/get_boundary.jl")
 include("Plots/2D/plot_champ_scalaire.jl")
-include("Plots/2D/plot_structure_with_centroids(.jl")
+include("Plots/2D/plot_structure_with_centroids.jl")
 include("Plots/3D/build_periodic_node_pairs.jl")
 include("Plots/3D/visualize_periodic_pairs.jl")
 
