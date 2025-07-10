@@ -10,7 +10,8 @@ function generate_mesh_and_retrieve_data(output_file,
                                          plate_lines,
                                          inclusion_borders,
                                          node_div_inc,
-                                         node_div_mat;
+                                         node_div_mat,
+                                         voids;
                                          bl_size=0.05,
                                          bl_size_far=0.20,
                                          bl_ratio=1.3,
@@ -104,7 +105,7 @@ function generate_mesh_and_retrieve_data(output_file,
     nodes_x = raw_nodes[1:3:end]; nodes_y = raw_nodes[2:3:end]
     nodes = hcat(nodes_x, nodes_y)
 
-     gmsh_elem_code = Dict(
+    gmsh_elem_code = Dict(
         :Lin2   => 1, :Lin3   => 8,  :Lin4  => 26, :Lin5 => 27, :Lin6 => 28,
         :Tri3   => 2, :Tri6   => 9,  :Tri10 => 21, :Tri15 => 23, :Tri21 => 25,
         :Quad4  => 3, :Quad8  => 16, :Quad9 => 10, :Quad16 => 36, :Quad25 => 37, :Quad36 => 38,
@@ -147,8 +148,11 @@ function generate_mesh_and_retrieve_data(output_file,
         push!(ind_C, convert.(Int, gmsh.model.mesh.getNodes(2, surface)[1])...)
     end
     ind_C = vcat(ind_C, ind_BC)
-    border_nodes = extract_border_nodes_from_elements(1, box_size=(1.0,1.0,0.0))
+    border_nodes = extract_border_nodes_from_elements(1; box_size=(1.0,1.0,0.0), inclusion_borders)
+
+    # Extract inclusion border elements
+
 
     return ind_G, ind_D, ind_B, ind_H, ind_C, elements,
-           nodes_x, nodes_y, elemPhase, physGroups ,border_nodes
+           nodes_x, nodes_y, elemPhase, physGroups, border_nodes
 end

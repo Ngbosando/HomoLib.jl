@@ -22,6 +22,7 @@ function getBoundaryNodes(nodeCoordinates, L)
             push!(topBoundaryNodes, i)     # Ajouter l'indice du nœud à la frontière supérieure
         end
     end
+   
 
     return leftBoundaryNodes, rightBoundaryNodes, topBoundaryNodes, bottomBoundaryNodes
 end

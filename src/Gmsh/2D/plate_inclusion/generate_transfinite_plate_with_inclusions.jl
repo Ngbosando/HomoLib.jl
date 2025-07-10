@@ -44,20 +44,21 @@ include("assign_PhysicalGroups.jl")
 include("sort_periodic_nodes.jl")
 include("filter_and_sort_nodes.jl")
 include("extract_border_nodes_from_elements.jl")
+
+
 function generate_transfinite_plate_with_inclusions(
     plate_width,
     plate_height,
     volume_fraction,
-    min_size,
-    max_size,
     output_file,
     shape,
     N_inclu,
     element_type,
     element_order,
-    second_Order_Incomplete,
     node_div_inc,
-    node_div_mat
+    node_div_mat;
+    voids=false,
+    show_gui=false
 )
     # Initialization of Gmsh
     initialize_gmsh()
@@ -69,16 +70,18 @@ function generate_transfinite_plate_with_inclusions(
     # Creation of inclusions
     inclusion_loops, inclusion_surfaces, inclusion_borders, num_inclusions = generate_inclusions(
         volume_fraction,
-        min_size,
-        max_size,
         plate_width,
         plate_height,
         shape,
-        N_inclu
+        N_inclu,
+        voids
     )
 
     # Creation of the plate surface with inclusions
-    plate_surface = gmsh.model.geo.addPlaneSurface([plate_loop; inclusion_loops...])
+    plate_surface = gmsh.model.geo.addPlaneSurface( [plate_loop; inclusion_loops...])
+    
+    
+   
 
     gmsh.model.geo.synchronize()
 
@@ -105,10 +108,13 @@ function generate_transfinite_plate_with_inclusions(
         plate_lines,
         inclusion_borders,
         node_div_inc,
-        node_div_mat)
+        node_div_mat,
+        voids)
 
 
-    gmsh.fltk.run()
+    if show_gui
+        gmsh.fltk.run()
+    end
     gmsh.finalize()
 
     return ind_G, ind_D, ind_B, ind_H, ind_C, elements,

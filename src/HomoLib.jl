@@ -8,7 +8,7 @@ using Gmsh: gmsh
 using Random, Tensors, Combinatorics
 using GeometryBasics, CairoMakie, DelaunayTriangulation
 import FastGaussQuadrature.gausslegendre, MAT
-using StatsBase
+using StatsBase,BenchmarkTools
 
 
 
@@ -19,6 +19,7 @@ struct Material
     properties::Dict{Symbol, Union{Number, Vector, Matrix}}
     tensors::Vector{AbstractMatrix{<:Real}}
     B_types::Vector{Symbol}
+    mass_properties::Union{Nothing, Dict{Symbol, Any}}
 end
 
 abstract type TriangularElement   end
@@ -85,6 +86,7 @@ include("Solve/solver.jl")
 include("Compute properties/effective_properties.jl")
 include("Gmsh/2D/plate_inclusion/generate_transfinite_plate_with_inclusions.jl")
 include("Gmsh/2D/Simple plate/plaque.jl")
+include("Gmsh/2D/Simple plate/quad_patch.jl")
 include("Gmsh/2D/Simple plate/get_boundary.jl")
 include("Plots/2D/plot_champ_scalaire.jl")
 include("Plots/2D/plot_structure_with_centroids.jl")

@@ -1,6 +1,6 @@
 
 
-function create_triangular_inclusion(x, y, side_length, θ)
+function create_triangular_inclusion(x, y, side_length, θ, voids)
     height = sqrt(3) / 2 * side_length  # Calculate the height of the equilateral triangle
    
     # Creation of points and lines
@@ -16,7 +16,7 @@ function create_triangular_inclusion(x, y, side_length, θ)
     L = [L1, L2, L3]
 
     loop = gmsh.model.geo.addCurveLoop([L1, L2, L3])
-    surface = gmsh.model.geo.addPlaneSurface([loop])
+    surface = voids ? nothing : gmsh.model.geo.addPlaneSurface([loop])
    
     gmsh.model.geo.rotate([(2, surface)], x, y, 0.0, 0.0, 0.0, 1.0, θ)
     

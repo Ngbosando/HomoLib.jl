@@ -23,10 +23,6 @@ function integration_rule(element_type::Symbol, order::Int)
         integration_rule(Tri21(), order)
     elseif element_type == :Hex8
         integration_rule(Hex8(), order)
-    elseif element_type == :Hex14
-        integration_rule(Hex14(), order)
-    elseif element_type == :Hex20
-        integration_rule(Hex20(), order)
     elseif element_type == :Hex27
         integration_rule(Hex27(), order)
     elseif element_type == :Hex64
@@ -67,20 +63,31 @@ function integration_rule(element_type::Symbol, order::Int)
         integration_rule(Lin3(), order)
     elseif element_type == :Lin4
         integration_rule(Lin4(), order)
+    elseif element_type == :Lin5
+        integration_rule(Lin5(), order)
+    elseif element_type == :Lin6
+        integration_rule(Lin6(), order)
     elseif element_type == :Pri6
         integration_rule(Pri6(), order)
     elseif element_type == :Pri18
         integration_rule(Pri18(), order)
-    else
+    elseif element_type == :Pri36
+        integration_rule(Pri36(), order)
+    elseif element_type == :Pri56
+        integration_rule(Pri56(), order)
+    elseif element_type == :Pri78
+        integration_rule(Pri78(), order)
+    els
         error("""
         Unsupported element type: $element_type
         Valid options: 
         - Triangular: :Tri3, :Tri6, :Tri10, :Tri15, :Tri21
-        - Hexahedral: :Hex8, :Hex14, :Hex20, :Hex27
-        - Tetrahedral: :Tet4, :Tet10
-        - Quadrilateral: :Quad4, :Quad8, :Quad9
-        - Pyramid: :Pyr5, :Pyr14
-        - Linear: :Lin2, :Lin3, :Lin4
+        - Hexahedral: :Hex8, :Hex27, :Hex64, :Hex125, :Hex216
+        - Tetrahedral: :Tet4, :Tet10, :Tet20, :Tet35, :Tet56
+        - Quadrilateral: :Quad4, :Quad9, :Quad16, :Quad25, :Quad36
+        - Pyramid: :Pyr5, :Pyr14, :Pyr29, :Pyr50, :Pyr77
+        - Prism: :Pri6, :Pri18, :Pri36, :Pri56, :Pri78
+        - Line: :Lin2, :Lin3, :Lin4, :Lin5, :Lin6
         """)
     end
 end

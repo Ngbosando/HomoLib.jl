@@ -1,5 +1,5 @@
 
-function create_circular_inclusion(x, y, radius)
+function create_circular_inclusion(x, y, radius, voids)
 
     # Creation of points and arcs
 
@@ -16,7 +16,7 @@ function create_circular_inclusion(x, y, radius)
     C = [C1, C2, C3, C4]
 
     loop = gmsh.model.geo.addCurveLoop([C1, C2, C3, C4])
-    surface = gmsh.model.geo.addPlaneSurface([loop])
+    surface = voids ? nothing : gmsh.model.geo.addPlaneSurface([loop])
 
 
     return loop, surface, C
