@@ -1,4 +1,4 @@
-function plaque(b, h, lc,lt, filename, E_o, element_type::Symbol)
+function plaque(b, h, lc,lt1,lt2, filename, E_o, element_type::Symbol; show_gui=false)
 
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 0)
@@ -7,8 +7,8 @@ function plaque(b, h, lc,lt, filename, E_o, element_type::Symbol)
     # Create the points of the rectangle
     gmsh.model.geo.addPoint(0,   0, 0, lc, 1)
     gmsh.model.geo.addPoint(b,   0, 0, lc, 2)
-    gmsh.model.geo.addPoint(b,   h, 0, lc, 3)
-    gmsh.model.geo.addPoint(0,   h, 0, lc, 4)
+    gmsh.model.geo.addPoint(b,    h, 0, lc, 3)
+    gmsh.model.geo.addPoint(0,    h, 0, lc, 4)
 
     # Create the lines of the rectangle:
     # Line 1: from point 1 to 2 (bottom)
@@ -25,13 +25,13 @@ function plaque(b, h, lc,lt, filename, E_o, element_type::Symbol)
     gmsh.model.geo.addPlaneSurface([1], 1)
 
     # Set transfinite meshing options
-    if lt != 0
-        gmsh.model.geo.mesh.setTransfiniteCurve(1, lt)
-        gmsh.model.geo.mesh.setTransfiniteCurve(2, lt)
-        gmsh.model.geo.mesh.setTransfiniteCurve(3, lt)
-        gmsh.model.geo.mesh.setTransfiniteCurve(4, lt)
+ 
+        gmsh.model.geo.mesh.setTransfiniteCurve(1, lt1)
+        gmsh.model.geo.mesh.setTransfiniteCurve(2, lt2)
+        gmsh.model.geo.mesh.setTransfiniteCurve(3, lt1)
+        gmsh.model.geo.mesh.setTransfiniteCurve(4, lt2)
         gmsh.model.geo.mesh.setTransfiniteSurface(1)
-    end
+    
     if element_type == :quadrilateral
         gmsh.model.geo.mesh.setRecombine(2, 1)
     end
@@ -75,40 +75,61 @@ function plaque(b, h, lc,lt, filename, E_o, element_type::Symbol)
     nodes_y = nodes_coords[2:3:end]
     nodes = [nodes_x nodes_y]
 
-    elements = gmsh.model.mesh.getElements()
-    connectivity = convert.(Int64, elements[3][2])
-    type = elements[1]
- println("type = $type")
+    gmsh_elem_code = Dict(
+        :Lin2   => 1, :Lin3   => 8,  :Lin4  => 26, :Lin5 => 27, :Lin6 => 28,
+        :Tri3   => 2, :Tri6   => 9,  :Tri10 => 21, :Tri15 => 23, :Tri21 => 25,
+        :Quad4  => 3, :Quad8  => 16, :Quad9 => 10, :Quad16 => 36, :Quad25 => 37, :Quad36 => 38,
+        :Tet4   => 4, :Tet10  => 11, :Tet20 => 29, :Tet35 => 30, :Tet56 => 31,
+        :Hex8   => 5, :Hex20  => 17, :Hex27 => 12, :Hex64 => 92, :Hex125 => 93, :Hex216 => 94,
+        :Pri6   => 6, :Pri18  => 13, :Pri40 => 90, :Pri75 => 91, :Pri126 => 106,
+        :Pyr5   => 7, :Pyr14  => 14, :Pyr30 => 118, :Pyr55 => 119, :Pyr91 => 120
+    )
+    connectivity = gmsh.model.mesh.getElements()
+    types = connectivity[1]
     if element_type == :triangle
         if E_o == 1
-            connectivity = [connectivity[1:3:end] connectivity[2:3:end] connectivity[3:3:end]]
+            elem_sym = :Tri3
         elseif E_o == 2
-            connectivity = [connectivity[1:6:end] connectivity[2:6:end] connectivity[3:6:end] connectivity[4:6:end] connectivity[5:6:end] connectivity[6:6:end]]
+            elem_sym = :Tri6
         elseif E_o == 3
-            connectivity = [connectivity[1:10:end] connectivity[2:10:end] connectivity[3:10:end] connectivity[4:10:end] connectivity[5:10:end] connectivity[6:10:end] connectivity[7:10:end] connectivity[8:10:end] connectivity[9:10:end] connectivity[10:10:end]]
+            elem_sym = :Tri10
         elseif E_o == 4
-            connectivity = [connectivity[1:15:end] connectivity[2:15:end] connectivity[3:15:end] connectivity[4:15:end] connectivity[5:15:end] connectivity[6:15:end] connectivity[7:15:end] connectivity[8:15:end] connectivity[9:15:end] connectivity[10:15:end] connectivity[11:15:end] connectivity[12:15:end] connectivity[13:15:end] connectivity[14:15:end] connectivity[15:15:end]]
+            elem_sym = :Tri15
         elseif E_o == 5
-            connectivity = [connectivity[1:21:end] connectivity[2:21:end] connectivity[3:21:end] connectivity[4:21:end] connectivity[5:21:end] connectivity[6:21:end] connectivity[7:21:end] connectivity[8:21:end] connectivity[9:21:end] connectivity[10:21:end] connectivity[11:21:end] connectivity[12:21:end] connectivity[13:21:end] connectivity[14:21:end] connectivity[15:21:end] connectivity[16:21:end] connectivity[17:21:end] connectivity[18:21:end] connectivity[19:21:end] connectivity[20:21:end] connectivity[21:21:end]]
+            elem_sym = :Tri21
         end
     elseif element_type == :quadrilateral
         if E_o == 1
-            connectivity = [connectivity[1:4:end] connectivity[2:4:end] connectivity[3:4:end] connectivity[4:4:end]]
+            elem_sym = :Quad4   
         elseif E_o == 2
-            connectivity = [connectivity[1:9:end] connectivity[2:9:end] connectivity[3:9:end] connectivity[4:9:end] connectivity[5:9:end] connectivity[6:9:end] connectivity[7:9:end] connectivity[8:9:end] connectivity[9:9:end]]
+            elem_sym = :Quad9
         elseif E_o == 3
-            connectivity = [connectivity[1:16:end] connectivity[2:16:end] connectivity[3:16:end] connectivity[4:16:end] connectivity[5:16:end] connectivity[6:16:end] connectivity[7:16:end] connectivity[8:16:end] connectivity[9:16:end] connectivity[10:16:end] connectivity[11:16:end] connectivity[12:16:end] connectivity[13:16:end] connectivity[14:16:end] connectivity[15:16:end] connectivity[16:16:end]]
+            elem_sym = :Quad16
         elseif E_o == 4
-            connectivity = [connectivity[1:25:end] connectivity[2:25:end] connectivity[3:25:end] connectivity[4:25:end] connectivity[5:25:end] connectivity[6:25:end] connectivity[7:25:end] connectivity[8:25:end] connectivity[9:25:end] connectivity[10:25:end] connectivity[11:25:end] connectivity[12:25:end] connectivity[13:25:end] connectivity[14:25:end] connectivity[15:25:end] connectivity[16:25:end] connectivity[17:25:end] connectivity[18:25:end] connectivity[19:25:end] connectivity[20:25:end] connectivity[21:25:end] connectivity[22:25:end] connectivity[23:25:end] connectivity[24:25:end] connectivity[25:25:end]]
+            elem_sym = :Quad25
         elseif E_o == 5
-            connectivity = [connectivity[1:36:end] connectivity[2:36:end] connectivity[3:36:end] connectivity[4:36:end] connectivity[5:36:end] connectivity[6:36:end] connectivity[7:36:end] connectivity[8:36:end] connectivity[9:36:end] connectivity[10:36:end] connectivity[11:36:end] connectivity[12:36:end] connectivity[13:36:end] connectivity[14:36:end] connectivity[15:36:end] connectivity[16:36:end] connectivity[17:36:end] connectivity[18:36:end] connectivity[19:36:end] connectivity[20:36:end] connectivity[21:36:end] connectivity[22:36:end] connectivity[23:36:end] connectivity[24:36:end] connectivity[25:36:end] connectivity[26:36:end] connectivity[27:36:end] connectivity[28:36:end] connectivity[29:36:end] connectivity[30:36:end] connectivity[31:36:end] connectivity[32:36:end] connectivity[33:36:end] connectivity[34:36:end] connectivity[35:36:end] connectivity[36:36:end]]
+            elem_sym = :Quad36
         end
     end
 
+    elem_code = gmsh_elem_code[elem_sym]
+
+    idx = findfirst(==(elem_code), types)
+  
+    if isnothing(idx)
+        error("Element $elem_sym (code $elem_code) not found in mesh!")
+    end
+    elements = convert.(Int64, connectivity[3][idx])
     
-    # gmsh.fltk.run()
+    elements = reshape_elements(elements,elem_sym,E_o) 
+
+    border_nodes = extract_border_nodes_from_elements(1, box_size=(b,h,0.0))
+    
+    if show_gui
+        gmsh.fltk.run()
+    end
     gmsh.finalize()
 
-    # Return nodes, connectivity, and physical groups (you can filter these if desired)
-    return nodes, connectivity
+   
+    return nodes, elements, border_nodes
 end

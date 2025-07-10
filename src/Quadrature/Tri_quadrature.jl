@@ -187,7 +187,7 @@ function integration_rule(element::TriangularElement, order::Int)
     end
 
     # Scale weights to account for reference triangle area (0.5)
-    # weights = 0.5 .* weights
+    weights = 0.5 .* weights
 
     return points, weights
 end

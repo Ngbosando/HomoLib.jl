@@ -19,8 +19,8 @@ Cette fonction calcule les indices des degrés de liberté associés aux coordon
 """
 
 function Transform_boundary(ind)
-    Boundary_Dof = zeros(Int, length_Dof, 2)
     length_Dof = length(ind)
+    Boundary_Dof = zeros(Int, length_Dof, 2)
     for e in 1:length_Dof
         Boundary_Dof[e, 1] = ind[e, 1] * 2 - 1
         Boundary_Dof[e, 2] = ind[e, 1] * 2

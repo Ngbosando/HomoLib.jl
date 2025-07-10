@@ -1,5 +1,5 @@
 
-function create_square_inclusion(x, y, size1, size2, θ)
+function create_square_inclusion(x, y, size1, size2, θ,voids)
    
  
     a = size1 / 2
@@ -21,7 +21,7 @@ function create_square_inclusion(x, y, size1, size2, θ)
 
 
     plate_loop = gmsh.model.geo.addCurveLoop(plate_lines)
-    surface = gmsh.model.geo.addPlaneSurface([plate_loop])
+    surface = voids ? nothing : gmsh.model.geo.addPlaneSurface([loop])
  
     gmsh.model.geo.rotate([(2, surface)], x, y, 0.0, 0.0, 0.0, 1.0, θ)
 

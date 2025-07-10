@@ -1,10 +1,9 @@
 function generate_inclusions(volume_fraction, 
-    min_size, 
-    max_size, 
     plate_width, 
     plate_height, 
     shape, 
-    N_inclu
+    N_inclu,
+    voids
 )
 
 inclusion_loops = Int[]
@@ -95,16 +94,17 @@ while remaining_volume >= 1e-3 && attempt_count < 1e6
 
     # x = xmin + (xmax - xmin)*rand()
     # y = ymin + (ymax - ymin)*rand()
-    x = 1/2
-    y = 1/2
+    x = plate_width/2
+    y = plate_height/2
 
     result = create_inclusion(shape,
             x, 
             y, 
             (r, b),
             θ,
-            existing_inclusions
-            )
+            existing_inclusions,
+            voids
+    )
 
     if result !== nothing
         loop, surface, border = result
@@ -112,7 +112,7 @@ while remaining_volume >= 1e-3 && attempt_count < 1e6
         # On stocke aussi θ pour pouvoir vérifier la position et la rotation ultérieurement
         push!(existing_inclusions, (x, y, r, b, θ))
         push!(inclusion_loops, loop)
-        push!(inclusion_surfaces, surface)
+        voids ? nothing :  push!(inclusion_surfaces, surface)
         push!(inclusion_borders, border)
         num_inclusions += 1 
 

@@ -1,17 +1,6 @@
 export 
 # analytical_bound
-    # elastic bound
-    mori_tanaka_elastic
-    voigt_elastic
-    reuss_elastic
-    hashin_shtrikman_bounds_elastic
-    self_consistent_elastic
-    # themal bound
-    reuss_conductivity
-    hashin_shtrikman_bounds
-    maxwell_bounds
-    voigt_conductivity   
-
+  theorical_bound
 # shape_functions && quadrature
     # shapes 
     shape_functions
@@ -33,20 +22,19 @@ export
     # Materials
     material_def
     resolve_material_type
-    # couple_materials
     # Global Assembly
     get_dofs_per_node
     assemble_global_matrix   
     assemble_global_dofs
     # Forces
     # BoundaryFace
-    # NodalForces
+    force_computation
     compute_volume_force_vector
     compute_volume_force_scalar
     compute_out_of_plane_force
     compute_surface_force_vector
     compute_surface_force_scalar
-    # Transform_boundary
+    Transform_boundary
 # Compute properties 
     compute_effective_property
     init_element_solution
@@ -108,6 +96,7 @@ export
     extract_border_nodes_from_elements
     # Simple plate
     plaque
+    generate_irregular_quad_patch_mesh
 
 # Plots 
     # 2D

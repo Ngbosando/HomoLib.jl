@@ -1,4 +1,4 @@
-function cube(filename="cube_hex.msh"; ndiv,b,h,l,element_order,element_type)
+function cube(filename="cube_hex.msh"; ndiv,b,h,l,element_order,element_type; show_gui=false)
     gmsh.initialize()
     gmsh.model.add("cube")
     gmsh.option.setNumber("General.Terminal", 0)
@@ -239,7 +239,9 @@ function cube(filename="cube_hex.msh"; ndiv,b,h,l,element_order,element_type)
   
 
 
-    gmsh.fltk.run()
+    if show_gui
+        gmsh.fltk.run()
+    end
     gmsh.finalize()
 
     return nodes, connectivity, ind_B, ind_Ba, ind_F, ind_L, ind_T, ind_R

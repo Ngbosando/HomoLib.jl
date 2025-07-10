@@ -1,9 +1,8 @@
 using Revise 
-using HomoLib: compute_effective_property
-using HomoLib:material_def,assemble_global_matrix,BoundaryCondition,HomogenizationBC,solve!
+using HomoLib: compute_effective_property,force_computation
+using HomoLib: material_def,assemble_global_matrix,BoundaryCondition,HomogenizationBC,solve!
 using HomoLib: plot_champ_scalaire,recover_field_values
-using GeometryBasics, CairoMakie,LinearAlgebra
-using HomoLib: generate_transfinite_plate_with_inclusions
+using HomoLib: generate_transfinite_plate_with_inclusions,reshape_elements,extract_border_nodes_from_elements
 using SparseArrays, Statistics, CairoMakie, Test
 using DelaunayTriangulation
 
@@ -15,34 +14,75 @@ using DelaunayTriangulation
 
     elastic_mat = material_def([:elastic], 2, :isotropic, 
                                 E=1.0, ν=0.0, plane_stress=true);
+                                 e_tensor = zeros(4,3);
+   # Example of 2D Piezoelectric Material Definition
+
+# Define material properties (using PZT-5H ceramic as example)
+# All values in SI units (GPa for stiffness, C/m² for piezo, pF/m for permittivity)
+
+# Elastic stiffness matrix (3x3 in Voigt notation for 2D plane stress)
+C = [126.0  79.5  0;
+      79.5 126.0  0;
+       0     0   23.0]  # in GPa
+
+# Piezoelectric stress matrix (3x2 for 2D)
+e = [
+     0   0     -6.5;    # e11, e12, e16
+      -17.0    -6.5   0]    # e21, e22, e26  (in C/m²)
+
+# Permittivity matrix (2x2)
+ϵ = [25.0  0;    # in nF/m (1505 ε₀)
+     0     25.0] 
+
+# Create the material
+piezo_mat = material_def([:elastic, :electric], 2, :isotropic,
+    C = C * 1e-9 ,    # Convert GPa to Pa
+    e = e*1e-6,          # Already in C/m²
+    ϵ = ϵ* 1e3 *8.85e-12      # Convert nF/m to F/m
+)
+
+# Display the material
+println("\n2D Piezoelectric Material Properties:")
+show(stdout, piezo_mat)
+
+
 
     # Mesh 
     using HomoLib: getBoundaryNodes,plaque
 
     # Define mesh parameters
-    b = 1;
-    h = 1;
+    b = 0.001;
+    h = 0.001;
     lc = 0.1; # mesh size
-    lt = 5;
+    lt = 1;
     filename = "Test_plate.msh";
     element_order = 2;
     element_type = :triangle;
-    nodes, connect = plaque(b, h, lc,lt, filename, element_order, element_type);
+    nodes, elements, border_nodes= plaque(b, h, lc,lt,lt, filename, element_order, element_type;show_gui=false);
 
     # =============================================
     # Assembling the Global Stiffness Matrix
     # =============================================
 
     K_elasticity = assemble_global_matrix(
-        connect,
+        elements,
         nodes,
         :Tri6,    # Element type
         2,         # Integration order
-        elastic_mat,
+        piezo_mat,
         2,          # Dimension
-        nothing
-    )
-
+        nothing)
+        K = K_elasticity
+    Kuu     = K[1:18, 1:18]
+    Kuϕ     = K[1:18, 19:27]
+    Kϕu     = K[19:27, 1:18]
+    Kϕϕ     = K[19:27, 19:27]
+    
+    println("||Kuu|| = ", maximum(abs.(Kuu)))
+    println("||Kuϕ|| = ", maximum(abs.(Kuϕ)))
+    println("||Kϕϕ|| = ", maximum(abs.(Kϕϕ)))
+    diff_norm = norm(Kϕu - Kuϕ')  # should be close to zero
+    println("‖K_ϕuᵀ + K_uϕ‖ = ", diff_norm)
     # =============================================
     # Verification Checks
     # =============================================
@@ -76,20 +116,8 @@ using DelaunayTriangulation
     # Check K * rigid_body_mode ≈ 0
     @test norm(K_elasticity * u) < 1e-12
     @test norm(K_elasticity * uθ ) < 1e-12
-
-    # Create thermal problem
-    function Transform_boundary(ind)
-        length_Dof = length(ind)
-        Boundary_Dof = zeros(Int, length_Dof, 2)
-
-        for e in 1:length_Dof
-            Boundary_Dof[e, 1] = ind[e, 1] * 2 - 1
-            Boundary_Dof[e, 2] = ind[e, 1] * 2
-        end
-
-        return Boundary_Dof
-    end
-
+println("cond(K) = ", cond(Matrix(K)))
+   
 
     f_global = zeros(size(K_elasticity,1))
     f = f_global
@@ -97,75 +125,62 @@ using DelaunayTriangulation
     leftBoundaryNodes, rightBoundaryNodes,top,bot = getBoundaryNodes(nodes, b)
     # Define BCs
 
-    dof_mask = [true, true]    # Constrain both ux (1st DOF) and uy (2nd DOF)
-    values = [1.0, 0.0]        # ux=1.0, uy=0.0
-
+    dof_mask = [true, true,true]    # Constrain both ux (1st DOF) and uy (2nd DOF)
+    values =  [0.0, 0.0, 0.0]
     dirichlet_bc1 = BoundaryCondition(
         :dirichlet,
-        rightBoundaryNodes,
+        [1],
         dof_mask,
         values,
-        2,  # dofs_per_node
+        3,  # dofs_per_node
     )
-    dof_mask = [true, true]    # Constrain both ux (1st DOF) and uy (2nd DOF)
-    values = [0.0, 0.0]   
+    dof_mask = [false, false, true]    # Constrain both ux (1st DOF) and uy (2nd DOF)
+    values =  [0.0, 0.0, 100.0]
     dirichlet_bc2 = BoundaryCondition(
         :dirichlet,
-        leftBoundaryNodes,
+        [3],
         dof_mask,
         values,
-        2  # dofs_per_node
+        3  # dofs_per_node
+    )
+      dof_mask = [false, false, true]    # Constrain both ux (1st DOF) and uy (2nd DOF)
+    values =  [0.0, 0.0, 0.0]
+    dirichlet_bc3 = BoundaryCondition(
+        :dirichlet,
+        [2,4],
+        dof_mask,
+        values,
+        3  # dofs_per_node
     )
     # Enforce periodic BC between:
     # Solve
     U = solve!(K_elasticity, f_global, f_global, [dirichlet_bc1,dirichlet_bc2])
 
+U_vec = copy(U)   # U = solution vector, size (243,)
+n_nodes = length(U_vec) ÷ 3
 
+u_x = U_vec[1:3:end]
+u_y = U_vec[2:3:end]
+ϕ   = U_vec[3:3:end]
+maximum(u_y), minimum(u_y), maximum(ϕ)
 
     N = size(nodes,1); 
 
-    Ux = U[1:2:end];
-    Uy = U[2:2:end];
+    Ux = U[1:3:end];
+    Uy = U[2:3:end];
     Nx, Ny = nodes[:, 1], nodes[:, 2];
     Nx₂ = Nx + Ux;
     Ny₂ = Ny + Uy;
 
     # put Poisson coef = 0 then : 
-    ux1 = [ Nx[i] / b for i in 1:N];
+    # ux1 = [ Nx[i] / b for i in 1:N];
+    uxy = -6.5*100*0.01/(8.73e10*0.01)
     errors = [Ux[i] - ux1[i] for i in 1:N]
     L2_error = sqrt(sum(errors .^ 2) / N)
     Linf_error = maximum(abs.(errors))
 
 # # =============================================
-# # ALL physics Test Setup
-# # =============================================
 
-    @testset "Stiffness Assembly for All Physics (2D isotropic)" begin
-        # Mesh: single triangle element
-        nodes = [0.0 0.0;
-                1.0 0.0;
-                0.0 1.0]
-        connectivity = [1 2 3]
-        dim = 2
-        order = 1
-        element_type = :Tri3
-
-        function run_test(B_types::Vector{Symbol}; kwargs...)
-            mat = material_def([:elastic], dim, :isotropic;E=1.0, ν=0.3, plane_stress=true,α=1e-5)
-            K = assemble_global_matrix(connectivity, nodes, element_type, order, mat, dim, nothing)
-            @test size(K[1], 1) == size(K[1], 2)
-            @test issymmetric(Matrix(K[1]))
-            @test norm(K[1]) > 1e-12
-        end
-
-        run_test([:elastic]; E=1.0, ν=0.3, plane_stress=true)
-        run_test([:thermal]; κ=1.0)
-        run_test([:elastic, :electric]; E=1.0, ν=0.3, plane_stress=true, e=zeros(3,2), ϵ=3.72e-2)
-        run_test([:elastic]; E=1.0, ν=0.3, plane_stress=true,α=1e-5)
-        run_test([:elastic, :electric]; E=1.0, ν=0.3, plane_stress=true, e=1.0, ε=1.0, β=1.0, κ=1.0,α=1e-5)
-    end
-
-    mat4 = material_def([:elastic], 2, :isotropic, E=70e9, ν=0.33, α=2.5e-6)
 # =============================================
 # Homogenization Test Setup
 # =============================================
@@ -265,8 +280,8 @@ using DelaunayTriangulation
                 1
             );
 
-            U₁ = solve!(T_thermal,zeros(size(T_thermal,1)),zeros(size(T_thermal,1)), [homogenization_bc]);
-            U₂ = solve!(T_thermal, zeros(size(T_thermal,1)), zeros(size(T_thermal,1)), [homogenization_bc1]);
+            U₁ = solve!(T_thermal,zeros(size(T_thermal,1)),zeros(size(T_thermal,1)), [dirichlet_bc]);
+            U₂ = solve!(T_thermal, zeros(size(T_thermal,1)), zeros(size(T_thermal,1)), [dirichlet_bc1]);
 
 
         # Plots temperature field and flux
@@ -348,7 +363,7 @@ using DelaunayTriangulation
                         int_order,         # Integration order
                         [elastic_mat1, elastic_mat2],
                         2,          # Dimension
-                        type_elem;NodalForces
+                        type_elem;
                        
                         );
 
@@ -432,10 +447,10 @@ using DelaunayTriangulation
             F_elast = zeros(size(K_elast,1));
             U_elast = zeros(size(K_elast,1));
 
-            U_mech = solve!(K_elast, F_elast, U_elast, [homogenization_bc]);
-            Umech2 = solve!(K_elast, F_elast, U_elast, [homogenization_bc1]);
-            Umech3 = solve!(K_elast, F_elast, U_elast, [homogenization_bc2]);
-            Umech4 = solve!(K_elast, F, zeros(size(K_elast,1)), [homogenization_bc3]);
+            U_mech = solve!(K_elast, F_elast, U_elast, [dirichlet_bc]);
+            Umech2 = solve!(K_elast, F_elast, U_elast, [dirichlet_bc1]);
+            Umech3 = solve!(K_elast, F_elast, U_elast, [dirichlet_bc2]);
+            Umech4 = solve!(K_elast, F, zeros(size(K_elast,1)), [dirichlet_bc3]);
 
         # Visualisation displacement and strain/stress
             magn=0.3;
@@ -508,4 +523,6 @@ using DelaunayTriangulation
             ℂ_eff = ℂ_eff[1]
 
     # In case of K_eff non-symettry to impose it
-
+# =============================================
+# Elasticity patch Test Setup
+# =============================================

@@ -27,6 +27,7 @@ function test_integration_rule_only()
 
                     vol = sum(w)
                     println("$vol")
+                    @show reference_volume(elem)
                     @test isapprox(vol, reference_volume(elem); atol=1e-8)
                 end
             end

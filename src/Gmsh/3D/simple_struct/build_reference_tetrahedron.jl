@@ -1,4 +1,4 @@
-function build_reference_tetrahedron(order::Int,element_type)
+function build_reference_tetrahedron(order::Int,element_type); show_gui=false
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 0)
     gmsh.model.add("ReferenceTetrahedron")
@@ -234,7 +234,9 @@ function build_reference_tetrahedron(order::Int,element_type)
         pp("Jacobian determinants at integration points", determinants, 1)
     end
 
-   gmsh.fltk.run()
+    if show_gui
+        gmsh.fltk.run()
+    end
     gmsh.finalize()
     return nodes, connectivity[1], connectivity[2]
 end

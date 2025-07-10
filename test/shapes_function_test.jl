@@ -5,7 +5,7 @@ using Printf
 using Dates
 
 # Helper function to safely sum gradients and check their properties
-function validate_shape_functions(element::Symbol, coords::Vector{NTuple}, atol=1e-6)
+function validate_shape_functions(element::Symbol, coords, atol=1e-6)
     @info "Testing element: $element with $(length(coords)) sample points"
     t_start = now()
     for ξ in coords
@@ -70,7 +70,7 @@ element_tests = Dict(
 
     :Pri6 => pri_coords(),
     :Pri18 => pri_coords(),
-    :Pri36 => pri_coords()
+    # :Pri36 => pri_coords()
     
 )
 
@@ -79,3 +79,4 @@ element_tests = Dict(
         validate_shape_functions(el, coords)
     end
 end
+

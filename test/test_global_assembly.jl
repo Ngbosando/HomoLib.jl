@@ -1,29 +1,71 @@
-
+using Revise
+using HomoLib:material_def,assemble_global_matrix
+using LinearAlgebra
+using CairoMakie
 using Test
-include("../src/HomoLib.jl")  # Adjust to actual path if different
 
-# Basic square mesh (4 node quad)
-nodes = [
-    0.0 0.0;
-    1.0 0.0;
-    1.0 1.0;
-    0.0 1.0
-]
-connectivity = [1 2 3 4]
-dim = 2
-order = 2
 
-function run_physics_test(B_types::Vector{Symbol})
-    mat = material_def(B_types, dim, :isotropic, E=1.0, ν=0.3, plane_stress=true, α=1e-5, T_ref=0.0)
-    K = assemble_global_matrix(connectivity, nodes, :Quad4, order, mat, dim, nothing)
-    @test issymmetric(K)
-    @test all(isfinite, K)
-end
 
-@testset "Assembly Tests for 2D Isotropic (Elastic, Piezo, Thermoelastic, Thermal, etc.)" begin
-    run_physics_test([:elastic])
-    run_physics_test([:elastic, :electric_field])
-    run_physics_test([:elastic, :temperature_gradient])
-    run_physics_test([:temperature_gradient])
-    run_physics_test([:strain])  # fallback to elastic
-end
+    @testset "Global Matrix Assembly Additional Tests" begin
+        # 2D Tests: Triangle element (Tri3)
+        nodes = [0.0 0.0;
+                 1.0 0.0;
+                 0.0 1.0]
+        elementsivity = [1 2 3]
+        dim = 2
+        order = 1
+        element_type = :Tri3
+
+        # A helper function that includes extra checks for the stiffness matrix
+        function run_test_extra(B_types::Vector{Symbol}, symmetry; kwargs...)
+            mat = material_def(B_types, dim, symmetry; kwargs...)
+            result = assemble_global_matrix(elementsivity, nodes, element_type, order, mat, dim, nothing)
+            K = isa(result, Tuple) ? result[1] : result
+            @test size(K, 1) == size(K, 2)
+            @test issymmetric(Matrix(K))
+            @test norm(K) > 1e-12
+            @test all(isfinite, K)
+        end
+
+        # Existing tests with additional internal checks
+        run_test_extra([:elastic], :out_of_plane; E=1.0, ν=0.3, plane_stress=true, α=1e-5)
+        run_test_extra([:elastic, :electric], :isotropic; E=1.0, ν=0.3, plane_stress=true, e=zeros(3,2), ϵ=1.0, α=1e-5)
+        run_test_extra([:thermal], :isotropic; κ=1)
+        Cr = Matrix(0.1I(3))
+        run_test_extra([:elastic], :isotropic; E=200e9, ν=0.3, Cr=Cr)
+
+        # 3D Test: Tetrahedral element (Tet4) assumed available in HomoLib
+        nodes3D = [0.0 0.0 0.0;
+                   1.0 0.0 0.0;
+                   0.0 1.0 0.0;
+                   0.0 0.0 1.0]
+        elementsivity3D = [1 2 3 4]
+        dim3 = 3
+        order3 = 1
+        element_type3 = :Tet4  # This element should be supported by HomoLib
+
+        function run_test_3D(B_types::Vector{Symbol}, symmetry; kwargs...)
+            mat = material_def(B_types, dim3, symmetry; kwargs...)
+            result = assemble_global_matrix(elementsivity3D, nodes3D, element_type3, order3, mat, dim3, nothing)
+            K = isa(result, Tuple) ? result[1] : result
+            @test size(K, 1) == size(K, 2)
+            @test issymmetric(Matrix(K))
+            @test norm(K) > 1e-12
+            @test all(isfinite, K)
+        end
+        run_test_3D([:elastic], :isotropic; E=1.0, ν=0.3)
+
+        # Error handling: When a non-existent material type is passed, expect an error.
+        # @test_throws ArgumentError material_def([:nonexistent], dim, :isotropic)
+
+        # Dummy check: Verify that the stiffness matrix has (nearly) nonnegative eigenvalues.
+        function dummy_matrix_check(B_types::Vector{Symbol}, symmetry; kwargs...)
+            mat = material_def(B_types, dim, symmetry; kwargs...)
+            result = assemble_global_matrix(elementsivity, nodes, element_type, order, mat, dim, nothing)
+            K = isa(result, Tuple) ? result[1] : result
+            s = eigvals(Matrix(K))
+            @test minimum(real(s)) > -1e-10
+        end
+        dummy_matrix_check([:elastic], :out_of_plane; E=1.0, ν=0.3, plane_stress=true, α=1e-5)
+    end
+  

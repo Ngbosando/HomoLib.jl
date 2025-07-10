@@ -7,113 +7,113 @@
 # =============================================
 
 
-# function shape_functions(::Pri6, ξ::T, η::T, ζ::T) where T<:Real
-#     # Shape functions for linear prism (6 nodes)
-#     # Bottom triangle (ζ = -1)
-#     N = T[
-#         (1 - ξ - η)*(1 - ζ)/2,   # Node 1
-#         ξ*(1 - ζ)/2,             # Node 2
-#         η*(1 - ζ)/2,             # Node 3
-#         (1 - ξ - η)*(1 + ζ)/2,   # Node 4
-#         ξ*(1 + ζ)/2,             # Node 5
-#         η*(1 + ζ)/2              # Node 6
-#     ]
+function shape_functions(::Pri6, ξ::T, η::T, ζ::T) where T<:Real
+    # Shape functions for linear prism (6 nodes)
+    # Bottom triangle (ζ = -1)
+    N = T[
+        (1 - ξ - η)*(1 - ζ)/2,   # Node 1
+        ξ*(1 - ζ)/2,             # Node 2
+        η*(1 - ζ)/2,             # Node 3
+        (1 - ξ - η)*(1 + ζ)/2,   # Node 4
+        ξ*(1 + ζ)/2,             # Node 5
+        η*(1 + ζ)/2              # Node 6
+    ]
     
-#     ∇N = Matrix{T}(undef, 6, 3)
-#     # ∂N/∂ξ, ∂N/∂η, ∂N/∂ζ derivatives
+    ∇N = Matrix{T}(undef, 6, 3)
+    # ∂N/∂ξ, ∂N/∂η, ∂N/∂ζ derivatives
  
-#     ∇N[1,:] = [-(1 - ζ)*0.5, -(1 - ζ)*0.5, -(1 - ξ - η)*0.5]
-#     ∇N[2,:] = [(1 - ζ)*0.5, 0.0, -ξ*0.5]
-#     ∇N[3,:] = [0.0, (1 - ζ)*0.5, -η*0.5]
-#     ∇N[4,:] = [-(1 + ζ)*0.5, -(1 + ζ)*0.5, (1 - ξ - η)*0.5]
-#     ∇N[5,:] = [(1 + ζ)*0.5, 0.0, ξ*0.5]
-#     ∇N[6,:] = [0.0, (1 + ζ)*0.5, η*0.5]
+    ∇N[1,:] = [-(1 - ζ)*0.5, -(1 - ζ)*0.5, -(1 - ξ - η)*0.5]
+    ∇N[2,:] = [(1 - ζ)*0.5, 0.0, -ξ*0.5]
+    ∇N[3,:] = [0.0, (1 - ζ)*0.5, -η*0.5]
+    ∇N[4,:] = [-(1 + ζ)*0.5, -(1 + ζ)*0.5, (1 - ξ - η)*0.5]
+    ∇N[5,:] = [(1 + ζ)*0.5, 0.0, ξ*0.5]
+    ∇N[6,:] = [0.0, (1 + ζ)*0.5, η*0.5]
     
-#     return N, ∇N[:,1], ∇N[:,2], ∇N[:,3]
-# end
+    return N, ∇N[:,1], ∇N[:,2], ∇N[:,3]
+end
 
-# # =============================================
-# # Pri18 Implementation (Quadratic)
-# # =============================================
+# =============================================
+# Pri18 Implementation (Quadratic)
+# =============================================
 
-# function shape_functions(::Pri18, ξ::T, η::T, ζ::T) where T<:Real
-#     node_coords = [
-#         (0.0, 0.0, -1.0), (1.0, 0.0, -1.0), (0.0, 1.0, -1.0),
-#         (0.5, 0.0, -1.0), (0.5, 0.5, -1.0), (0.0, 0.5, -1.0),
-#         (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0),
-#         (0.5, 0.0, 0.0), (0.5, 0.5, 0.0), (0.0, 0.5, 0.0),
-#         (0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (0.0, 1.0, 1.0),
-#         (0.5, 0.0, 1.0), (0.5, 0.5, 1.0), (0.0, 0.5, 1.0)
-#     ]
+function shape_functions(::Pri18, ξ::T, η::T, ζ::T) where T<:Real
+    node_coords = [
+        (0.0, 0.0, -1.0), (1.0, 0.0, -1.0), (0.0, 1.0, -1.0),
+        (0.5, 0.0, -1.0), (0.5, 0.5, -1.0), (0.0, 0.5, -1.0),
+        (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0),
+        (0.5, 0.0, 0.0), (0.5, 0.5, 0.0), (0.0, 0.5, 0.0),
+        (0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (0.0, 1.0, 1.0),
+        (0.5, 0.0, 1.0), (0.5, 0.5, 1.0), (0.0, 0.5, 1.0)
+    ]
     
-#     N = Vector(undef, 18)
-#     ∇N = Matrix(undef, 18, 3)
+    N = Vector(undef, 18)
+    ∇N = Matrix(undef, 18, 3)
     
-#     function tri_basis(ξ::T, η::T)
-#         L1 = 1 - ξ - η
-#         L2 = ξ
-#         L3 = η
-#         return [
-#             L1*(2L1 - 1),
-#             L2*(2L2 - 1),
-#             L3*(2L3 - 1),
-#             4L1*L2,
-#             4L2*L3,
-#             4L3*L1
-#         ]
-#     end
+    function tri_basis(ξ::T, η::T)
+        L1 = 1 - ξ - η
+        L2 = ξ
+        L3 = η
+        return [
+            L1*(2L1 - 1),
+            L2*(2L2 - 1),
+            L3*(2L3 - 1),
+            4L1*L2,
+            4L2*L3,
+            4L3*L1
+        ]
+    end
     
-#     function tri_deriv(ξ::T, η::T)
-#         dN_dξ = [
-#             -4*(1 - ξ - η) + 1,
-#             4ξ - 1,
-#             0.0,
-#             4*(1 - 2ξ - η),
-#             -4η,
-#             4η
-#         ]
-#         dN_dη = [
-#             -4*(1 - ξ - η) + 1,
-#             0.0,
-#             4η - 1,
-#             -4ξ,
-#             4ξ,
-#             4*(1 - ξ - 2η)
-#         ]
-#         return dN_dξ, dN_dη
-#     end
+    function tri_deriv(ξ::T, η::T)
+        dN_dξ = [
+            -4*(1 - ξ - η) + 1,
+            4ξ - 1,
+            0.0,
+            4*(1 - 2ξ - η),
+            -4η,
+            4η
+        ]
+        dN_dη = [
+            -4*(1 - ξ - η) + 1,
+            0.0,
+            4η - 1,
+            -4ξ,
+            4ξ,
+            4*(1 - ξ - 2η)
+        ]
+        return dN_dξ, dN_dη
+    end
     
-#     line_basis = [
-#         ζ*(ζ - 1)/2,
-#         1 - ζ^2,
-#         ζ*(ζ + 1)/2
-#     ]
+    line_basis = [
+        ζ*(ζ - 1)/2,
+        1 - ζ^2,
+        ζ*(ζ + 1)/2
+    ]
     
-#     line_deriv = [
-#         (2ζ - 1)/2,
-#         -2ζ,
-#         (2ζ + 1)/2
-#     ]
+    line_deriv = [
+        (2ζ - 1)/2,
+        -2ζ,
+        (2ζ + 1)/2
+    ]
     
-#     for (i, (ξi, ηi, ζi)) in enumerate(node_coords)
-#         tri_idx = ((i - 1) % 6) + 1
-#         layer = (i - 1) ÷ 6 + 1
+    for (i, (ξi, ηi, ζi)) in enumerate(node_coords)
+        tri_idx = ((i - 1) % 6) + 1
+        layer = (i - 1) ÷ 6 + 1
         
-#         tri_vals = tri_basis(ξ, η)
-#         dTri_dξ, dTri_dη = tri_deriv(ξ, η)
+        tri_vals = tri_basis(ξ, η)
+        dTri_dξ, dTri_dη = tri_deriv(ξ, η)
         
-#         line_val = line_basis[layer]
-#         dLine_dζ = line_deriv[layer]
+        line_val = line_basis[layer]
+        dLine_dζ = line_deriv[layer]
         
-#         N[i] = tri_vals[tri_idx] * line_val
+        N[i] = tri_vals[tri_idx] * line_val
         
-#         ∇N[i,1] = dTri_dξ[tri_idx] * line_val
-#         ∇N[i,2] = dTri_dη[tri_idx] * line_val
-#         ∇N[i,3] = tri_vals[tri_idx] * dLine_dζ
-#     end
+        ∇N[i,1] = dTri_dξ[tri_idx] * line_val
+        ∇N[i,2] = dTri_dη[tri_idx] * line_val
+        ∇N[i,3] = tri_vals[tri_idx] * dLine_dζ
+    end
     
-#     return N, ∇N[:,1], ∇N[:,2], ∇N[:,3]
-# end
+    return N, ∇N[:,1], ∇N[:,2], ∇N[:,3]
+end
 
 
 # ---------------------------------------------
@@ -220,8 +220,8 @@ end
 
 # ---------------------------------------------
 # Dispatches
-shape_functions(::Pri6, ξ::T, η::T, ζ::T) where T<:Real = shapeFunctions_PrismN(ξ, η, ζ, 1)
-shape_functions(::Pri18, ξ::T, η::T, ζ::T) where T<:Real = shapeFunctions_PrismN(ξ, η, ζ, 2)
+# shape_functions(::Pri6, ξ::T, η::T, ζ::T) where T<:Real = shapeFunctions_PrismN(ξ, η, ζ, 1)
+# shape_functions(::Pri18, ξ::T, η::T, ζ::T) where T<:Real = shapeFunctions_PrismN(ξ, η, ζ, 2)
 shape_functions(::Pri36, ξ::T, η::T, ζ::T) where T<:Real = shapeFunctions_PrismN(ξ, η, ζ, 3)
 shape_functions(::Pri56, ξ::T, η::T, ζ::T) where T<:Real = shapeFunctions_PrismN(ξ, η, ζ, 4)
 shape_functions(::Pri78, ξ::T, η::T, ζ::T) where T<:Real = shapeFunctions_PrismN(ξ, η, ζ, 5)

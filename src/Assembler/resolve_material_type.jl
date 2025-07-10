@@ -5,10 +5,12 @@
 Resolves a composite material `physics` vector (e.g. `[:elastic, :thermal]`) 
 into a legacy type symbol used for dispatch.
 """
-function resolve_material_type(physics::Vector{Symbol})
+function resolve_material_type(materials::Union{Material,Vector{Material}})
+ 
+    physics = materials.type
     s = Set(physics)
 
-    if s == Set([:elastic])
+    if s == Set([:elastic]) && !haskey(materials.properties, :α_p) 
         return :elastic
     elseif s == Set([:elastic, :electric])
         return :piezoelectric
@@ -16,12 +18,10 @@ function resolve_material_type(physics::Vector{Symbol})
         return :thermal
     elseif s == Set([:elastic, :thermal])
         return :thermoelastic
-    elseif s == Set([:elastic, :thermal, :electric])
-        return :thermo_piezoelectric
-    elseif s == Set([:strain])
-        return :viscoelastic
-    elseif s == Set([:elastic, :pressure])
+    elseif s == Set([:elastic, :pressure]) || haskey(materials.properties, :α_p)
         return :poroelastic
+    elseif s == Set([:fluid, :pressure])
+        return :stokes
     else
         error("Unknown material combination: $physics")
     end
