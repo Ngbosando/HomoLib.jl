@@ -7,16 +7,20 @@ function shapeFunctions_HexN(ξ::T, η::T, ζ::T, count::Int) where T<:Real
     Lη, dLη = lagrange_shape_functions(nodes_1d, η)
     Lζ, dLζ = lagrange_shape_functions(nodes_1d, ζ)
 
-    N = T[]
-    dN_dξ = T[]
-    dN_dη = T[]
-    dN_dζ = T[]
+    n = count^3
+    N      = Vector{T}(undef, n)
+    dN_dξ  = similar(N)
+    dN_dη  = similar(N)
+    dN_dζ  = similar(N)
 
-    for k in 1:count, j in 1:count, i in 1:count
-        push!(N, Lξ[i] * Lη[j] * Lζ[k])
-        push!(dN_dξ, dLξ[i] * Lη[j] * Lζ[k])
-        push!(dN_dη, Lξ[i] * dLη[j] * Lζ[k])
-        push!(dN_dζ, Lξ[i] * Lη[j] * dLζ[k])
+    idx = 1
+    @inbounds for k in 1:count, j in 1:count, i in 1:count
+        lk = Lζ[k]; lj = Lη[j]; li = Lξ[i]
+        N[idx]     = li * lj * lk
+        dN_dξ[idx] = dLξ[i] * lj * lk
+        dN_dη[idx] = li * dLη[j] * lk
+        dN_dζ[idx] = li * lj * dLζ[k]
+        idx += 1
     end
     
 
