@@ -123,7 +123,7 @@ function plaque(b, h, lc,lt1,lt2, filename, E_o, element_type::Symbol; show_gui=
     
     elements = reshape_elements(elements,elem_sym,E_o) 
 
-    border_nodes = extract_border_nodes_from_elements(1, box_size=(b,h,0.0))
+    border_nodes = extract_border_nodes_from_elements(1; box_size=(b,h,0.0),inclusion_borders = nothing)
     
     if show_gui
         gmsh.fltk.run()

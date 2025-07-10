@@ -24,7 +24,7 @@ function shapeFunctions_HexN(ξ::T, η::T, ζ::T, count::Int) where T<:Real
     end
     
 
-    # return N[reorder], dN_dξ[reorder], dN_dη[reorder], dN_dζ[reorder]
+
     return N, dN_dξ, dN_dη, dN_dζ
 
 end

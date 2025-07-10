@@ -29,22 +29,21 @@ function main()
         voids=true  # Void inclusions
     )
 
-    println("thermal start")
-    κ_eff     = run_thermal_case(mesh_non_poro, Elem)
-    @info "Thermal effective conductivity:" κ_eff
+    # println("thermal start")
+    # κ_eff     = run_thermal_case(mesh_non_poro, Elem)
+    # @info "Thermal effective conductivity:" κ_eff
 
-    println("elastic start")
-    C_eff     = run_elastic_case(mesh_non_poro, Elem)
-    @info "Elastic effective stiffness tensor:" C_eff
+    # println("elastic start")
+    # C_eff     = run_elastic_case(mesh_non_poro, Elem)
+    # @info "Elastic effective stiffness tensor:" C_eff
 
-    println("piezo start")
-    piezo_eff = run_piezo_case(mesh_non_poro, Elem)
-    @info "Piezoelectric effective properties:" piezo_eff
+    # println("piezo start")
+    # piezo_eff = run_piezo_case(mesh_non_poro, Elem)
+    # @info "Piezoelectric effective properties:" piezo_eff
 
     println("poro start")
     Biot_tensor = run_poro_case(mesh_poro, Elem)
     @info "porileasticity effective properties:" Biot_tensor
-    return (Biot_tensor)
 end
 
 # =============================================
@@ -92,14 +91,7 @@ function setup_mesh(; width, height, volume_fraction,
 
     MeshData(nodes, elements, type_elem, Nₓ, Nᵧ, boundary, boundary_element, boundary_inclusion, master, slave)
 end
-#  Elem = ElemData(:Tri6, 2, 2);
-#     mesh = setup_mesh(;
-#         width=1.0, height=1.0,
-#         volume_fraction=0.2, n_inclusions=1,
-#         Elem, node_divisions=(5, 5), shape=:circle,
-#         output_file="Test_plate_with_inclusions.msh",
-#         voids = false
-#     );
+
 # =============================================
 # Thermal homogenization
 # =============================================
@@ -488,7 +480,14 @@ end
 # =============================================
 # stokes homogenization
 # =============================================
-
+#  Elem = ElemData(:Tri6, 2, 2);
+#     mesh = setup_mesh(;
+#         width=1.0, height=1.0,
+#         volume_fraction=0.2, n_inclusions=1,
+#         Elem, node_divisions=(5, 5), shape=:circle,
+#         output_file="Test_plate_with_inclusions.msh",
+#         voids = false
+#     );
 function run_stokesFlow_case(mesh::MeshData, Elem::ElemData)
     # Material definition
     C1 = [8.0 4.4 0 4.4; 4.4 8.0 0 4.4; 0 0 3.6 0; 4.4 4.4 0 8]

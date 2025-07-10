@@ -67,7 +67,6 @@ export
     # Get L-R boundary .
     getBoundaryNodes
     # GMSH
-    # 2D
     # Plate with random inclusions
     generate_transfinite_plate_with_inclusions
     create_circular_inclusion
@@ -97,7 +96,9 @@ export
     # Simple plate
     plaque
     generate_irregular_quad_patch_mesh
-
+    # cube 
+    cube
+    build_reference_tetrahedron
 # Plots 
     # 2D
     plot_champ_scalaire

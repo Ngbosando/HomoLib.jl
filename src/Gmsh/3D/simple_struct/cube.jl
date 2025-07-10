@@ -1,4 +1,4 @@
-function cube(filename="cube_hex.msh"; ndiv,b,h,l,element_order,element_type; show_gui=false)
+function cube(filename, ndiv,b,h,l,element_order,element_type; show_gui=false)
     gmsh.initialize()
     gmsh.model.add("cube")
     gmsh.option.setNumber("General.Terminal", 0)
