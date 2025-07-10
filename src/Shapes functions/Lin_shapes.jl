@@ -5,15 +5,8 @@
 
 
 function gmsh_ordering_line(count::Int)::Vector{Int}
-    ordering = Int[]
-    push!(ordering, 1)                       # start node
-    push!(ordering, count)                   # end node
-    if count > 2
-        for i in 2:count-1
-            push!(ordering, i)               # internal edge nodes
-        end
-    end
-    return ordering
+    internal = count > 2 ? collect(2:count-1) : Int[]
+    return [1, count, internal...]
 end
 
 function shapeFunctions_LineN(ξ::T, count::Int) where T<:Real

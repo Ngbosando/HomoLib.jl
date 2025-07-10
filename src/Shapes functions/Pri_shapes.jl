@@ -157,35 +157,22 @@ function triangle_shape_derivatives(p::Int, ξ::T, η::T) where T
     L1 = 1 - ξ - η
     L2 = ξ
     L3 = η
-    coeffs = Tuple{Int,Int}[]
-    for i in 0:p, j in 0:(p - i)
-        push!(coeffs, (i, j))
-    end
+    n = div((p + 1) * (p + 2), 2)
+    N     = Vector{T}(undef, n)
+    dN_dξ = similar(N)
+    dN_dη = similar(N)
 
-    N = T[]
-    dN_dξ = T[]
-    dN_dη = T[]
-
-    for (i, j) in coeffs
-        k = p - i - j
-        c = factorial(p) / (factorial(i) * factorial(j) * factorial(k))
-        push!(N, c * L1^k * L2^i * L3^j)
-
-        ∂L1_ξ, ∂L2_ξ, ∂L3_ξ = -1, 1, 0
-        ∂L1_η, ∂L2_η, ∂L3_η = -1, 0, 1
-
-        dξ = c * (
-            -k * L1^(k - 1) * L2^i * L3^j * ∂L1_ξ +
-             i * L1^k * L2^(i - 1) * L3^j * ∂L2_ξ +
-             j * L1^k * L2^i * L3^(j - 1) * ∂L3_ξ
-        )
-        dη = c * (
-            -k * L1^(k - 1) * L2^i * L3^j * ∂L1_η +
-             i * L1^k * L2^(i - 1) * L3^j * ∂L2_η +
-             j * L1^k * L2^i * L3^(j - 1) * ∂L3_η
-        )
-        push!(dN_dξ, dξ)
-        push!(dN_dη, dη)
+    idx = 1
+    @inbounds for i in 0:p
+        for j in 0:(p - i)
+            k = p - i - j
+            c = factorial(p) / (factorial(i) * factorial(j) * factorial(k))
+            lk = L1^k; li = L2^i; lj = L3^j
+            N[idx] = c * lk * li * lj
+            dN_dξ[idx] = c * (k * L1^(k - 1) * li * lj + i * lk * L2^(i - 1) * lj)
+            dN_dη[idx] = c * (k * L1^(k - 1) * li * lj + j * lk * li * L3^(j - 1))
+            idx += 1
+        end
     end
 
     return N, dN_dξ, dN_dη
@@ -199,18 +186,23 @@ function shapeFunctions_PrismN(ξ::T, η::T, ζ::T, p::Int) where T<:Real
 
     N_tri, dN_ξ, dN_η = triangle_shape_derivatives(p, ξ, η)
 
-    N = T[]
-    dN_dξ = T[]
-    dN_dη = T[]
-    dN_dζ = T[]
+   n_tri = length(N_tri)
+    total = (p + 1) * n_tri
+    N     = Vector{T}(undef, total)
+    dN_dξ = similar(N)
+    dN_dη = similar(N)
+    dN_dζ = similar(N)
 
-    for k in 1:(p + 1)
-        Lnt = length(N_tri)
-        for i in 1:Lnt
-            push!(N, N_tri[i] * Lζ[k])
-            push!(dN_dξ, dN_ξ[i] * Lζ[k])
-            push!(dN_dη, dN_η[i] * Lζ[k])
-            push!(dN_dζ, N_tri[i] * dLζ[k])
+    idx = 1
+    @inbounds for k in 1:(p + 1)
+        lk = Lζ[k]; dlk = dLζ[k]
+        for i in 1:n_tri
+            nt = N_tri[i]
+            N[idx]     = nt * lk
+            dN_dξ[idx] = dN_ξ[i] * lk
+            dN_dη[idx] = dN_η[i] * lk
+            dN_dζ[idx] = nt * dlk
+            idx += 1
         end
     end
 

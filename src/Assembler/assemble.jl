@@ -691,21 +691,20 @@ include("transform_boundary.jl")
 
         # ==================== VOLUME FORCE COMPUTATIONS ==================== #
             function compute_volume_force_vector(N, scaling, fᵥ, dim, n_nodes)
-                f = zeros(n_nodes * dim)
-                for i in 1:n_nodes
-                    for d in 1:dim
-                        idx = (i-1)*dim + d
-                       
-                        f[idx] = N[i] * fᵥ[d] * scaling
+                f = zeros(eltype(N), n_nodes * dim)
+                @inbounds for i in 1:n_nodes
+                    Ni = N[i] * scaling
+                    base = (i-1)*dim
+                    @simd for d in 1:dim
+                        f[base + d] = Ni * fᵥ[d]
                     end
                 end
                 return f
             end
 
             function compute_volume_force_scalar(N, scaling, fᵥ)
-                f = zeros(length(N))
-                @inbounds for i in eachindex(N)
-                   
+               f = zeros(eltype(N), length(N))
+                @inbounds @simd for i in eachindex(N)
                     f[i] = N[i] * fᵥ * scaling
                 end
                 return f
