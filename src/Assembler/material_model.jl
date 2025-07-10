@@ -327,12 +327,12 @@ function piezo_tensor(dim::Int, symmetry::Symbol, props::Dict)
     
     if dim == 2
         if symmetry == :out_of_plane
-            size(e) == (3, 4) || error("Piezo matrix must be 4×3 for out-of-plane in 2D")
+            size(e) == (3, 4) || error("Piezo matrix must be 3×4 for out-of-plane in 2D")
         else
-            size(e) == (2, 3) || error("Piezo matrix must be 3×2 in 2D")
+            size(e) == (2, 3) || error("Piezo matrix must be 2×3 in 2D")
         end
     else
-        size(e) == (3, 6) || error("Piezo matrix must be 6×3 in 3D")
+        size(e) == (3, 6) || error("Piezo matrix must be 3×6 in 3D")
     end
     return e
 end

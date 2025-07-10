@@ -5,102 +5,116 @@
 # ----------------------
 # Jacobian Computation
 # ----------------------
-function compute_jacobian(elem_conn, nodes, shp, dim::Int; elem_dim)
-    n_nodes = length(elem_conn)
-    ngp = length(shp.weights)
-    out = Vector{Tuple{Float64, Matrix{Float64}, Matrix{Float64}}}(undef, ngp)
-    
-    # Create local copy of coordinates
-    coords = nodes[elem_conn, :]
-    
-    # Pre-check orientation at first Gauss point for square Jacobians
-    if dim == elem_dim
-        dNξ = shp.shape_ξ[1]
-        dNη = (elem_dim ≥ 2) ? shp.shape_η[1] : zeros(n_nodes)
-        dNζ = (elem_dim == 3) ? shp.shape_ζ[1] : zeros(n_nodes)
+    function compute_jacobian(elem_conn, nodes, shp, dim::Int; elem_dim)
+        n_nodes = length(elem_conn)
+        ngp = length(shp.weights)
+        out = Vector{Tuple{Float64, Matrix{Float64}, Matrix{Float64}}}(undef, ngp)
         
-        J_test = zeros(elem_dim, dim)
-        for i in 1:n_nodes
-            x, y, z = coords[i, 1], coords[i, 2], (dim == 3 ? coords[i, 3] : 0.0)
-            
-            # Parametric derivative ξ
-            J_test[1, 1] += dNξ[i] * x
-            J_test[1, 2] += dNξ[i] * y
-            dim == 3 && (J_test[1, 3] += dNξ[i] * z)
-            
-            # Parametric derivative η
-            if elem_dim ≥ 2
-                J_test[2, 1] += dNη[i] * x
-                J_test[2, 2] += dNη[i] * y
-                dim == 3 && (J_test[2, 3] += dNη[i] * z)
-            end
-            
-            # Parametric derivative ζ
-            if elem_dim == 3
-                J_test[3, 1] += dNζ[i] * x
-                J_test[3, 2] += dNζ[i] * y
-                J_test[3, 3] += dNζ[i] * z
-            end
-        end
-       
-        # Flip connectivity if Jacobian is negative
-        if det(J_test) < 0
-            reversed_conn = reverse(elem_conn)
-            coords = nodes[reversed_conn, :]
-        end
-    end
-
-    # Main Gauss point loop
-    for q in 1:ngp
-        dNξ = shp.shape_ξ[q]
-        dNη = (elem_dim == 2 && shp.shape_η !== nothing)  ? shp.shape_η[q] : zeros(n_nodes)
-        dNζ = (elem_dim == 3 && shp.shape_ζ !== nothing) ? shp.shape_ζ[q] : zeros(n_nodes)
-
-        # Initialize Jacobian matrix
-        J = zeros(elem_dim, dim)
+        # Create local copy of coordinates
+        coords = nodes[elem_conn, :]
         
-        # Build Jacobian with proper derivative separation
-        for i in 1:n_nodes
-            node_idx = elem_conn[i]
-           x, y = nodes[node_idx, 1], nodes[node_idx, 2]
-          
-            
-            # ξ-derivatives (row 1)
-            J[1, 1] += dNξ[i] * x  # ∂x/∂ξ
-            J[1, 2] += dNξ[i] * y  # ∂y/∂ξ
-    
-            
-            # η-derivatives (row 2)
-            if elem_dim == 2
-                J[2, 1] += dNη[i] * x  # ∂x/∂η
-                J[2, 2] += dNη[i] * y  # ∂y/∂η
-               
-            end
-            
-            # ζ-derivatives (row 3)
-            if elem_dim == 3
-                J[3, 1] += dNζ[i] * x  # ∂x/∂ζ
-                J[3, 2] += dNζ[i] * y  # ∂y/∂ζ
-                J[3, 3] += dNζ[i] * z  # ∂z/∂ζ
-            end
-        end
-
-        # Compute determinant and inverse
+        # Pre-check orientation at first Gauss point for square Jacobians
         if dim == elem_dim
-            detJ = det(J)
-            abs_detJ = abs(detJ)
-            invJ = inv(J)
-        else
-            # Pseudo-determinant for non-square Jacobians
-            abs_detJ = sqrt(abs(det(J * J')))
-            invJ = pinv(J)  # Moore-Penrose pseudoinverse
+            dNξ = shp.shape_ξ[1]
+            dNη = (elem_dim ≥ 2) ? shp.shape_η[1] : zeros(n_nodes)
+            dNζ = (elem_dim == 3) ? shp.shape_ζ[1] : zeros(n_nodes)
+            
+            J_test = zeros(elem_dim, dim)
+            for i in 1:n_nodes
+                x, y, z = coords[i, 1], coords[i, 2], (dim == 3 ? coords[i, 3] : 0.0)
+                
+                # Parametric derivative ξ
+                J_test[1, 1] += dNξ[i] * x
+                J_test[1, 2] += dNξ[i] * y
+                dim == 3 && (J_test[1, 3] += dNξ[i] * z)
+                
+                # Parametric derivative η
+                if elem_dim ≥ 2
+                    J_test[2, 1] += dNη[i] * x
+                    J_test[2, 2] += dNη[i] * y
+                    dim == 3 && (J_test[2, 3] += dNη[i] * z)
+                end
+                
+                # Parametric derivative ζ
+                if elem_dim == 3
+                    J_test[3, 1] += dNζ[i] * x
+                    J_test[3, 2] += dNζ[i] * y
+                    J_test[3, 3] += dNζ[i] * z
+                end
+            end
+        
+            # Flip connectivity if Jacobian is negative
+            if det(J_test) < 0
+                reversed_conn = reverse(elem_conn)
+                coords = nodes[reversed_conn, :]
+            end
         end
-      
-        abs_detJ < 1e-12 && error("Jacobian nearly singular at Gauss point $q")
-        out[q] = (abs_detJ, invJ, J)
+
+        # Main Gauss point loop
+        for q in 1:ngp
+            dNξ = shp.shape_ξ[q]
+            dNη = (elem_dim >= 2 && shp.shape_η !== nothing)  ? shp.shape_η[q] : zeros(n_nodes)
+            dNζ = (elem_dim == 3 && shp.shape_ζ !== nothing) ? shp.shape_ζ[q] : zeros(n_nodes)
+
+            # Initialize Jacobian matrix
+            J = zeros(elem_dim, dim)
+            
+            # Build Jacobian with proper derivative separation
+            for i in 1:n_nodes
+                node_idx = elem_conn[i]
+                x = nodes[node_idx, 1]
+                if dim >=  2
+                    y = nodes[node_idx, 2]
+                else
+                    y = nothing
+                end
+                if dim == 3
+                    z = nodes[node_idx, 3]
+                else 
+                    z = nothing
+                end
+                # ξ-derivatives (row 1)
+                J[1, 1] += dNξ[i] * x  # ∂x/∂ξ
+                if y !== nothing
+                    J[1, 2] += dNξ[i] * y  # ∂y/∂ξ
+                end
+                if z !== nothing
+                    J[1, 3] += dNξ[i] * z  # ∂y/∂ξ
+                end
+                
+                # η-derivatives (row 2)
+                if elem_dim >= 2
+                    J[2, 1] += dNη[i] * x  # ∂x/∂η
+                    J[2, 2] += dNη[i] * y  # ∂y/∂η
+                    if z !== nothing
+                        J[1, 3] += dNη[i] * z  # ∂y/∂ξ
+                    end  
+                end
+                
+                # ζ-derivatives (row 3)
+                if elem_dim == 3
+                    J[3, 1] += dNζ[i] * x  # ∂x/∂ζ
+                    J[3, 2] += dNζ[i] * y  # ∂y/∂ζ
+                    J[3, 3] += dNζ[i] * z  # ∂z/∂ζ
+                end
+            end
+
+            # Compute determinant and inverse
+            if dim == elem_dim
+                detJ = det(J)
+                abs_detJ = abs(detJ)
+                invJ = inv(J)
+            else
+                # Pseudo-determinant for non-square Jacobians
+                abs_detJ = sqrt(abs(det(J * J')))
+                invJ = pinv(J)  # Moore-Penrose pseudoinverse
+            end
+        
+            abs_detJ < 1e-12 && error("Jacobian nearly singular at Gauss point $q")
+            out[q] = (abs_detJ, invJ, J)
+        end
+        return out
     end
-    return out
-end
 
 # ----------------------
 # Shape Data Precomputation

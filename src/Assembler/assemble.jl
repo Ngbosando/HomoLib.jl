@@ -691,20 +691,21 @@ include("transform_boundary.jl")
 
         # ==================== VOLUME FORCE COMPUTATIONS ==================== #
             function compute_volume_force_vector(N, scaling, fᵥ, dim, n_nodes)
-                f = zeros(eltype(N), n_nodes * dim)
+                f = zeros(eltype(N), n_nodes)
+
                 @inbounds for i in 1:n_nodes
                     Ni = N[i] * scaling
                     base = (i-1)*dim
-                    @simd for d in 1:dim
+                     for d in 1:dim
                         f[base + d] = Ni * fᵥ[d]
                     end
                 end
                 return f
             end
 
-            function compute_volume_force_scalar(N, scaling, fᵥ)
-               f = zeros(eltype(N), length(N))
-                @inbounds @simd for i in eachindex(N)
+            function compute_volume_force_scalar(N, scaling, fᵥ, n_nodes)
+               f = zeros(eltype(N), n_nodes)
+                @inbounds for i in eachindex(N)
                     f[i] = N[i] * fᵥ * scaling
                 end
                 return f
@@ -740,23 +741,16 @@ include("transform_boundary.jl")
                 face_coords::Matrix{Float64},
                 n)
               
-                f = zeros(size(N_face, 1))
-
                 x_qp = compute_x_qp(N_face, face_coords)
                 fₜ_val = fₜ isa AbstractTraction ? evaluate(fₜ, x_qp) : zeros(dim)
-                fₜ_val = - fₜ_val * n
-                
-                f = N_face' * fₜ_val * scaling
-              
-                return f
+                return (N_face' * (-fₜ_val * n)) * scaling
             end
 
             function compute_surface_force_scalar(N_face, scaling, fₜ, face_conn, elem_conn)
-                f = zeros(size(N_face, 1))
                 x_qp = compute_x_qp(N_face, face_coords)
                 fₜ_val = fₜ isa AbstractTraction ? evaluate(fₜ, x_qp) : zeros(dim)
                 f = N_face * fₜ_val * scaling
-                return f
+                return N_face * fₜ_val * scaling
             end
             # Helper function for permutation vector
             function get_node_wise_permutation(material::Material, n_nodes::Int)
@@ -930,6 +924,8 @@ include("transform_boundary.jl")
                       # Initialize separate force vectors
                     f_u = zeros(n_dofs_u + n_dofs_ϕ)  # Mechanical forces
                     f_ϕ = zeros(n_dofs_ϕ + n_dofs_u)  # Electrical forces
+                    F_u =  zeros(n_dofs_u)
+                    F_ϕ =  zeros(n_dofs_ϕ)
                     for qp in 1:length(gauss_data.weights)
                         detJ, _ = jac_data[qp]
                         scaling = abs(detJ) * gauss_data.weights[qp]
@@ -956,8 +952,10 @@ include("transform_boundary.jl")
                         else
                           
                             N = gauss_data.N[qp]
-                            f_u += compute_volume_force_vector(N, scaling, forces.fᵥ, dim, n_dofs)
-                            f_ϕ += compute_volume_force_vector(N, scaling, forces.fᵥ, dim, n_dofs)
+                            F_u += compute_volume_force_vector(N, scaling, forces.fᵥ, dim, n_dofs_u)
+                            F_ϕ += compute_volume_force_scalar(N, scaling, forces.fᵥ, n_dofs_ϕ)
+                            f += vcat(F_u, F_ϕ)
+                            fe = f
                         end
                     end
                 end

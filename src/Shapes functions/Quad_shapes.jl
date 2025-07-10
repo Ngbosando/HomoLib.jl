@@ -77,34 +77,34 @@ function lagrange_shape_functions(nodes::Vector{T}, ξ::T) where T<:Real
 end
 
 function gmsh_ordering(n::Int)
-    idx = Int[]
-    # Helper stack to avoid recursion
+    idx = Vector{Int}(undef, n^2)
     stack = [(0, 0, n)]
+    pos = 1
     while !isempty(stack)
         (i0, j0, nlayer) = popfirst!(stack)
         # 1. Corners (counterclockwise)
-        push!(idx, (j0    )*n + (i0    ) + 1)
-        push!(idx, (j0    )*n + (i0+nlayer-1) + 1)
-        push!(idx, (j0+nlayer-1)*n + (i0+nlayer-1) + 1)
-        push!(idx, (j0+nlayer-1)*n + (i0    ) + 1)
+        idx[pos]     = (j0    )*n + (i0    ) + 1; pos += 1
+        idx[pos]     = (j0    )*n + (i0+nlayer-1) + 1; pos += 1
+        idx[pos]     = (j0+nlayer-1)*n + (i0+nlayer-1) + 1; pos += 1
+        idx[pos]     = (j0+nlayer-1)*n + (i0    ) + 1; pos += 1
         # 2. Edges (excluding corners)
         # bottom
         for i in 1:nlayer-2
-            push!(idx, (j0    )*n + (i0+i) + 1)
+            idx[pos] = (j0    )*n + (i0+i) + 1; pos += 1
         end
         # right
         for j in 1:nlayer-2
-            push!(idx, (j0+j)*n + (i0+nlayer-1) + 1)
+            idx[pos] = (j0+j)*n + (i0+nlayer-1) + 1; pos += 1
         end
         # top
         for i in nlayer-2:-1:1
-            push!(idx, (j0+nlayer-1)*n + (i0+i) + 1)
+            idx[pos] = (j0+nlayer-1)*n + (i0+i) + 1; pos += 1
         end
         # left
         for j in nlayer-2:-1:1
-            push!(idx, (j0+j)*n + (i0    ) + 1)
+            idx[pos] = (j0+j)*n + (i0    ) + 1; pos += 1
         end
-        # 3. Internal (if present)
+        # 3. Internal 
         if nlayer > 2
             pushfirst!(stack, (i0+1, j0+1, nlayer-2))
         end
@@ -122,15 +122,20 @@ function shapeFunctions_QuadN(ξ::T, η::T,order::Int) where T<:Real
     Lξ, dLξ = lagrange_shape_functions(nodes_1d, ξ)
     Lη, dLη = lagrange_shape_functions(nodes_1d, η)
    
-    N = T[]
-    dN_dξ = T[]
-    dN_dη = T[]
+    n = order^2
+    N      = Vector{T}(undef, n)
+    dN_dξ  = similar(N)
+    dN_dη  = similar(N)
 
-    for j in 1:order
+    idx = 1
+    @inbounds for j in 1:order
+        Lj = Lη[j]; dLj = dLη[j]
         for i in 1:order
-            push!(N, Lξ[i] * Lη[j])
-            push!(dN_dξ, dLξ[i] * Lη[j])
-            push!(dN_dη, Lξ[i] * dLη[j])
+           li = Lξ[i]; dli = dLξ[i]
+            N[idx]     = li * Lj
+            dN_dξ[idx] = dli * Lj
+            dN_dη[idx] = li * dLj
+            idx += 1
         end
     end
    

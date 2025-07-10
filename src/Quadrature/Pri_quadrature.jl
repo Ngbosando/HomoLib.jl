@@ -7,13 +7,19 @@ function integration_rule(element::PrismaticElement, order::Int)
     tri_points, tri_weights = integration_rule(Tri3(),order)  # Pour la base triangulaire
     z, wz = gausslegendre(order)   
     
-    # Transformation de [-1,1] à [0,1] 
-    # z = 0.5 .* (z .+ 1)
-    # wz = 0.5 .* wz
-
-    # Produit tensoriel
-    points = [((xi, eta, zeta)) for (xi, eta) in tri_points, zeta in z]
-    weights = [w_tri * w_z for w_tri in tri_weights, w_z in wz]
+   n = length(tri_points) * length(z)
+    points  = Vector{NTuple{3,Float64}}(undef, n)
+    weights = Vector{Float64}(undef, n)
+    idx = 1
+    for (p_idx, (xi, eta)) in enumerate(tri_points)
+        w_tri = tri_weights[p_idx]
+        for (zeta, w_z) in zip(z, wz)
+            points[idx] = (xi, eta, zeta)
+            weights[idx] = w_tri * w_z
+            idx += 1
+        end
+    end
+    
     
     return points, weights
 end

@@ -38,24 +38,26 @@ function extract_border_nodes_from_elements(dim::Int; tol=1e-6, box_size=(1.0,1.
         end
     end
     # Inclusion borders: each arc defines curve elements (1D) connectivity
-    for (i, arcs) in enumerate(inclusion_borders)
-        key = Symbol("inclusion_$(i)")
-        # determine element size for curves: first arc
-        if !isempty(arcs)
-            # assume all curves same etype
-            etypes, etags, nodeTags1 = gmsh.model.mesh.getElements(1, arcs[1])
-            n_per_curve = gmsh.model.mesh.getElementProperties(etypes[1])[4]
-            sides[key] = Array{Int,2}(undef, 0, n_per_curve)
-        else
-            sides[key] = zeros(Int, 0, 0)
-        end
-        for arc in arcs
-            etypes, etags, nodeTags1 = gmsh.model.mesh.getElements(1, arc)
-            for (etype, etags2, nids2) in zip(etypes, etags, nodeTags1)
-                n_per = gmsh.model.mesh.getElementProperties(etype)[4]
-                for j in 1:length(etags2)
-                    conn = nids2[(j-1)*n_per+1 : j*n_per]
-                    sides[key] = vcat(sides[key], reshape(conn, 1, n_per))
+    if inclusion_borders !==nothing
+        for (i, arcs) in enumerate(inclusion_borders)
+            key = Symbol("inclusion_$(i)")
+            # determine element size for curves: first arc
+            if !isempty(arcs)
+                # assume all curves same etype
+                etypes, etags, nodeTags1 = gmsh.model.mesh.getElements(1, arcs[1])
+                n_per_curve = gmsh.model.mesh.getElementProperties(etypes[1])[4]
+                sides[key] = Array{Int,2}(undef, 0, n_per_curve)
+            else
+                sides[key] = zeros(Int, 0, 0)
+            end
+            for arc in arcs
+                etypes, etags, nodeTags1 = gmsh.model.mesh.getElements(1, arc)
+                for (etype, etags2, nids2) in zip(etypes, etags, nodeTags1)
+                    n_per = gmsh.model.mesh.getElementProperties(etype)[4]
+                    for j in 1:length(etags2)
+                        conn = nids2[(j-1)*n_per+1 : j*n_per]
+                        sides[key] = vcat(sides[key], reshape(conn, 1, n_per))
+                    end
                 end
             end
         end

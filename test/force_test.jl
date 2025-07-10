@@ -1,4 +1,6 @@
-using HomoLib: compute_element_force,NodalForces,BoundaryFace,material_def
+using Revise
+using HomoLib: compute_element_force,material_def
+using HomoLib: compute_element_force, material_def, shape_data, jacobian_data, build_B_matrices
 using Test
-using FastGaussQuadrature: gausslegendre
-
+using LinearAlgebra, SparseArrays, Statistics
+ 

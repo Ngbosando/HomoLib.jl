@@ -8,8 +8,10 @@ function integration_rule(element::PyramidElement, order::Int)
     s, ws = gausslegendre(order)
     t_interval, wt = gausslegendre(order)
     
-    points = []
-    weights = []
+    n = order^3
+    points  = Vector{NTuple{3,Float64}}(undef, n)
+    weights = Vector{Float64}(undef, n)
+    idx = 1
     for i in 1:order, j in 1:order, k in 1:order
         # Cube coordinates
         ξ = r[i]
@@ -27,8 +29,9 @@ function integration_rule(element::PyramidElement, order::Int)
         # Jacobian includes both transformation and dt/dτ
         J = (1 - t)^2 / 2
         
-        push!(points, (x, y, z))
-        push!(weights, wr[i] * ws[j] * wt[k] * J)
+        points[idx] = (x, y, z)
+        weights[idx] = wr[i] * ws[j] * wt[k] * J
+        idx += 1
     end
     
     return points, weights
