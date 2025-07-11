@@ -29,7 +29,7 @@ using LinearAlgebra
     @test length(gauss.shape_ξ) == length(gauss.weights)
 
     # Step 2: Jacobian
-    jac_data = jacobian_data(connectivity, nodes, gauss)
+    jac_data = jacobian_data(connectivity, nodes, gauss, material.dim)
     @test length(jac_data) == 1
     for (detJ, invJ) in jac_data[1]
         @test isapprox(detJ, 0.25; atol=1e-10)  # Area of 1 for unit square split into 4 Gauss pts

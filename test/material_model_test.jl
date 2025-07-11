@@ -36,17 +36,17 @@ using Test
     @test :electric_field in mat5.B_types
 
     # Poroelasticity 
-    mat6 = material_def([:elastic], 2, :isotropic, E=50e9, ν=0.25, α_p=[0.7,0])
+    mat6 = material_def([:elastic], 2, :isotropic, E=50e9, ν=0.25, α_p=0.7)
     @test length(mat6.tensors) == 2
-    @test :pressure in mat6.B_types
+    @test :pressure ∉ mat6.B_types
 
     # Biot Poroelasticity 
-    mat7 = material_def([:fluid, :elastic], 2, :isotropic, E=50e9, ν=0.25, α_p=[0.7,0], M=1e9, μ_f=1e-3)
+    mat7 = material_def([:fluid, :elastic], 2, :isotropic, E=50e9, ν=0.25, α_p=0.7, M=1e9, μ_f=1e-3)
     @test length(mat7.tensors) == 4
     @test :velocity_gradient in mat7.B_types
 
     # stokes flow
-    mat8 = material_def([:fluid],2,:isotropic,α_p=[0.7,0], μ_f=1e-3 )
+    mat8 = material_def([:fluid],2,:isotropic,α_p=0.7, μ_f=1e-3 )
     @test length(mat8.tensors) == 2
     @test :pressure in mat8.B_types
 

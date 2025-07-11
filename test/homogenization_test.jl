@@ -2,10 +2,11 @@ using Revise
 using LinearAlgebra, SparseArrays, Statistics
 using CairoMakie, Test
 using HomoLib: generate_transfinite_plate_with_inclusions,
-                  material_def, assemble_global_matrix,
-                  HomogenizationBC, BoundaryCondition, solve!,
-                  plot_champ_scalaire, recover_field_values,
-                  compute_effective_property,force_computation
+                material_def, assemble_global_matrix,
+                HomogenizationBC, BoundaryCondition, solve!,
+                plot_champ_scalaire, recover_field_values,
+                compute_effective_property,force_computation,
+                shape_data,jacobian_data,build_B_matrices
 
 # =============================================
 # Main workflow
@@ -28,18 +29,19 @@ function main()
         output_file="Test_plate_with_inclusions_poro.msh",
         voids=true  # Void inclusions
     )
+    
 
-    # println("thermal start")
-    # κ_eff     = run_thermal_case(mesh_non_poro, Elem)
-    # @info "Thermal effective conductivity:" κ_eff
+    println("thermal start")
+    κ_eff     = run_thermal_case(mesh_non_poro, Elem)
+    @info "Thermal effective conductivity:" κ_eff
 
-    # println("elastic start")
-    # C_eff     = run_elastic_case(mesh_non_poro, Elem)
-    # @info "Elastic effective stiffness tensor:" C_eff
+    println("elastic start")
+    C_eff     = run_elastic_case(mesh_non_poro, Elem)
+    @info "Elastic effective stiffness tensor:" C_eff
 
-    # println("piezo start")
-    # piezo_eff = run_piezo_case(mesh_non_poro, Elem)
-    # @info "Piezoelectric effective properties:" piezo_eff
+    println("piezo start")
+    piezo_eff = run_piezo_case(mesh_non_poro, Elem)
+    @info "Piezoelectric effective properties:" piezo_eff
 
     println("poro start")
     Biot_tensor = run_poro_case(mesh_poro, Elem)
@@ -99,7 +101,12 @@ function run_thermal_case(mesh::MeshData, Elem::ElemData)
     # Material definition
     mat_thermal_1 = material_def([:thermal], 2, :isotropic; κ=1)
     mat_thermal_2 = material_def([:thermal], 2, :isotropic; κ=5)
-
+    dim = 2
+    # Precompute data 
+    gauss_data = shape_data(Elem.type, Elem.int_order, dim)
+    jacobian_cache = jacobian_data(mesh.elements, mesh.nodes, gauss_data, dim)
+    B_dicts = build_B_matrices(mesh.nodes, mesh.elements, mat_thermal_1, gauss_data, jacobian_cache)
+    Geometric_Data = (gauss_data = gauss_data,jacobian_cache = jacobian_cache,B_dicts = B_dicts )
     # Stiffness matrix
     T_thermal = assemble_global_matrix(
         mesh.elements,
@@ -108,7 +115,8 @@ function run_thermal_case(mesh::MeshData, Elem::ElemData)
         Elem.int_order,
         [mat_thermal_1, mat_thermal_2],
         2,
-        mesh.type_elem
+        mesh.type_elem,
+        Geometric_Data
     )
 
     # Periodic boundary conditions
@@ -148,7 +156,8 @@ function run_thermal_case(mesh::MeshData, Elem::ElemData)
         mesh.type_elem,
         Elem.type,
         Elem.int_order,
-        2
+        2,
+        Geometric_Data
     )
     Q1, Q2 = flux_q12.flux[:,1], flux_q12.flux[:,2]
     p3 = plot_champ_scalaire(mesh.nodes, mesh.elements, Q1, Elem.type)
@@ -163,7 +172,8 @@ function run_thermal_case(mesh::MeshData, Elem::ElemData)
         (U=(U1, U2),),
         Elem.type,
         Elem.int_order,
-        2
+        2,
+        Geometric_Data
     )
     return κ_eff
 end
@@ -176,6 +186,12 @@ function run_elastic_case(mesh::MeshData, Elem::ElemData)
     elastic_mat1 = material_def([:elastic], 2, :out_of_plane, E=1.0, ν=0.45)
     elastic_mat2 = material_def([:elastic], 2, :out_of_plane, E=50.0, ν=0.3)
 
+    dim = 2
+    # Precompute data 
+    gauss_data = shape_data(Elem.type, Elem.int_order, dim)
+    jacobian_cache = jacobian_data(mesh.elements, mesh.nodes, gauss_data, dim)
+    B_dicts = build_B_matrices(mesh.nodes, mesh.elements, elastic_mat1, gauss_data, jacobian_cache)
+    Geometric_Data = (gauss_data = gauss_data,jacobian_cache = jacobian_cache,B_dicts = B_dicts )
     # Stiffness matrix
     K_elast, F = assemble_global_matrix(
         mesh.elements,
@@ -184,7 +200,8 @@ function run_elastic_case(mesh::MeshData, Elem::ElemData)
         Elem.int_order,
         [elastic_mat1, elastic_mat2],
         2,
-        mesh.type_elem
+        mesh.type_elem,
+        Geometric_Data
     )
 
     # Periodic BCs
@@ -225,7 +242,8 @@ function run_elastic_case(mesh::MeshData, Elem::ElemData)
         mesh.type_elem,
         Elem.type,
         Elem.int_order,
-        2
+        2,
+        Geometric_Data
     )
     σ₁₁, σ₂₂, σ₁₂ = stress_strain.stress[:,1], stress_strain.stress[:,2], stress_strain.stress[:,3]
     ϵ₁₁, ϵ₂₂, ϵ₁₂ = stress_strain.strain[:,1], stress_strain.strain[:,2], stress_strain.strain[:,3]
@@ -246,7 +264,8 @@ function run_elastic_case(mesh::MeshData, Elem::ElemData)
         solver_results,
         Elem.type,
         Elem.int_order,
-        2
+        2,
+        Geometric_Data
     )
     return ℂ_eff[1]
 end
@@ -268,13 +287,18 @@ function run_piezo_case(mesh::MeshData, Elem::ElemData)
                                C=C1, e=e_tensor1, ϵ=ϵ1)
     piezo_mat2 = material_def([:elastic, :electric], 2, :out_of_plane,
                                C=C2, e=e_tensor2, ϵ=ϵ2)
-
+    dim = 2
+    # Precompute data 
+    gauss_data = shape_data(Elem.type, Elem.int_order, dim)
+    jacobian_cache = jacobian_data(mesh.elements, mesh.nodes, gauss_data, dim)
+    B_dicts = build_B_matrices(mesh.nodes, mesh.elements, piezo_mat1, gauss_data, jacobian_cache)
+    Geometric_Data = (gauss_data = gauss_data,jacobian_cache = jacobian_cache,B_dicts = B_dicts )
     # Assemble coupled stiffness
     K_piezo, F_u, F_ϕ = assemble_global_matrix(
         mesh.elements, mesh.nodes,
         Elem.type, Elem.int_order,
         [piezo_mat1, piezo_mat2],
-        2, mesh.type_elem
+        2, mesh.type_elem, Geometric_Data
     )
     isapprox(K_piezo, K_piezo', rtol=1e-16) || error("K_piezo is not symmetric")
 
@@ -323,7 +347,8 @@ function run_piezo_case(mesh::MeshData, Elem::ElemData)
         mesh.elements, nodes2,
         [piezo_mat1, piezo_mat2],
         (U=U5, ϕ=U5),
-        mesh.type_elem, Elem.type, Elem.int_order, 2
+        mesh.type_elem, Elem.type, Elem.int_order, 2,
+        Geometric_Data
     )
     σ₁₁, σ₂₂, σ₁₂ = stress_strain.stress[:,1], stress_strain.stress[:,2], stress_strain.stress[:,3]
     ϵ₁₁, ϵ₂₂, ϵ₁₂ = stress_strain.strain[:,1], stress_strain.strain[:,2], stress_strain.strain[:,3]
@@ -342,7 +367,8 @@ function run_piezo_case(mesh::MeshData, Elem::ElemData)
     )
     props,_ = compute_effective_property(
         [piezo_mat1, piezo_mat2], mesh.elements, mesh.nodes,
-        mesh.type_elem, solver_results, Elem.type, Elem.int_order, 2
+        mesh.type_elem, solver_results, Elem.type, Elem.int_order, 2,
+        Geometric_Data
     )
     return (C=props.C, e=props.e, ϵ=props.ϵ)
 end
@@ -353,6 +379,12 @@ end
 function run_poro_case(mesh::MeshData, Elem::ElemData)
     # Material definition
     poro_mat = material_def([:elastic], 2, :isotropic,plane_stress = false, E=10, ν=1/3, α_p=0.7);
+    dim = 2
+    # Precompute data no poro
+    gauss_data = shape_data(Elem.type, Elem.int_order, dim)
+    jacobian_cache = jacobian_data(mesh.elements, mesh.nodes, gauss_data, dim)
+    B_dicts = build_B_matrices(mesh.nodes, mesh.elements, poro_mat, gauss_data, jacobian_cache)
+    Geometric_Data = (gauss_data = gauss_data,jacobian_cache = jacobian_cache,B_dicts = B_dicts )
 
     # force initialisation
     border_elem = mesh.boundary_element;
@@ -372,7 +404,8 @@ function run_poro_case(mesh::MeshData, Elem::ElemData)
         mesh.elements, mesh.nodes,
         Elem.type, Elem.int_order,
         poro_mat,
-        2, mesh.type_elem;
+        2, mesh.type_elem,
+        Geometric_Data;
         NodalForces,BoundaryFace
     );
 
@@ -423,7 +456,8 @@ function run_poro_case(mesh::MeshData, Elem::ElemData)
         mesh.elements, mesh.nodes,
         poro_mat,
         (U=U4,),
-        mesh.type_elem, Elem.type, Elem.int_order, 2
+        mesh.type_elem, Elem.type, Elem.int_order, 2,
+        Geometric_Data
     );
     σ₁₁, σ₂₂, σ₁₂ = stress_strain.stress[:,1], stress_strain.stress[:,2], stress_strain.stress[:,3];
     ϵ₁₁, ϵ₂₂, ϵ₁₂ = stress_strain.strain[:,1], stress_strain.strain[:,2], stress_strain.strain[:,3];
@@ -447,7 +481,8 @@ function run_poro_case(mesh::MeshData, Elem::ElemData)
         solver_results,
         Elem.type,
         Elem.int_order,
-        2
+        2,
+        Geometric_Data
     );
     vf = 1-volume
     vt = vf + volume
@@ -502,6 +537,12 @@ function run_stokesFlow_case(mesh::MeshData, Elem::ElemData)
                                C=C1, e=e_tensor1, ϵ=ϵ1)
     piezo_mat2 = material_def([:elastic, :electric], 2, :out_of_plane,
                                C=C2, e=e_tensor2, ϵ=ϵ2)
+
+    # Precompute data no poro
+    gauss_data = shape_data(ElemData.type, ElemData.int_order, ElemData.dim)
+    jacobian_cache = jacobian_data(MeshData.connect, MeshData.nodes, gauss_data, ElemData.dim)
+    B_dicts = build_B_matrices(MeshData.nodes, MeshData.connect, Flow_mat, gauss_data, jacobian_cache)
+    Geometric_Data = (gauss_data = gauss_data,jacobian_cache = jacobian_cache,B_dicts = B_dicts )
 
     # Assemble coupled stiffness
     K_piezo, F_u, F_ϕ = assemble_global_matrix(

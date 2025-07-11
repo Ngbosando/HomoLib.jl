@@ -9,7 +9,8 @@
         connect_elem_phase::Union{Vector{Int}, Nothing},
         element_type::Symbol,
         integration_order::Int,
-        dim::Int)
+        dim::Int,
+        Geometric_Data)
         
         # ========== Material Setup ========== #
         is_composite = material isa Vector{Material}
@@ -36,9 +37,9 @@
 
         # ========== Precomputation ========== #
         ref_mat = is_composite ? material[1] : material
-        gauss_data = shape_data(element_type, integration_order, dim)
-        jac_cache = jacobian_data(elements, nodes, gauss_data, dim)
-        B_dicts = build_B_matrices(nodes, elements, ref_mat, gauss_data, jac_cache)
+        gauss_data = Geometric_Data.gauss_data
+        jac_cache = Geometric_Data.jacobian_cache
+        B_dicts = Geometric_Data.B_dicts
 
         # ========== Node Connectivity ========== #
         connect_nodes_triangles, count_tri_per_node = find_elem_connected_to_nodes(elements, nodes[:,1])

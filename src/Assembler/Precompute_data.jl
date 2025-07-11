@@ -81,13 +81,13 @@
                 if z !== nothing
                     J[1, 3] += dNξ[i] * z  # ∂y/∂ξ
                 end
-                
+               
                 # η-derivatives (row 2)
                 if elem_dim >= 2
                     J[2, 1] += dNη[i] * x  # ∂x/∂η
                     J[2, 2] += dNη[i] * y  # ∂y/∂η
                     if z !== nothing
-                        J[1, 3] += dNη[i] * z  # ∂y/∂ξ
+                        J[2, 3] += dNη[i] * z  # ∂y/∂ξ
                     end  
                 end
                 
@@ -98,7 +98,7 @@
                     J[3, 3] += dNζ[i] * z  # ∂z/∂ζ
                 end
             end
-
+           
             # Compute determinant and inverse
             if dim == elem_dim
                 detJ = det(J)

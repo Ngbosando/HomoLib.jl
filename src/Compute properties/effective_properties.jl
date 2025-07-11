@@ -10,7 +10,8 @@ include("compute_flux.jl")
         solver_results::NamedTuple,
         element_type::Symbol,
         integration_order::Int,
-        dim::Int)
+        dim::Int,
+        Geometric_Data)
         
         # ========== Phase Handling ========== #
             is_composite = materials isa Vector{Material}
@@ -36,10 +37,11 @@ include("compute_flux.jl")
             end
 
         # ========== Precomputation ========== #
-            gauss_data = shape_data(element_type, integration_order, dim)
-            jac_cache = jacobian_data(elements, nodes, gauss_data, dim)
+            gauss_data = Geometric_Data.gauss_data
+            jac_cache = Geometric_Data.jacobian_cache
+            B_dicts = Geometric_Data.B_dicts
             ref_mat = is_composite ? materials[1] : materials
-            B_dicts = build_B_matrices(nodes, elements, ref_mat, gauss_data, jac_cache)
+        
 
             # ========== Init Storage ========== #
             result_template = init_global_storage(materials, dim)

@@ -346,7 +346,7 @@ include("transform_boundary.jl")
     # =============================================
     # Helper Functions for  Global dof Assembler 
     # =============================================
-        function assemble_global_dofs(connectivity::Matrix{Int}, material::Material)
+        function assemble_global_dofs(connectivity::Union{Vector{Int} ,Matrix{Int}}, material::Material)
             n_elements, nodes_per_element = size(connectivity)
             dofs_per_node = get_dofs_per_node(material)
             global_dofs = Matrix{Int}(undef, n_elements, nodes_per_element * dofs_per_node)
@@ -395,9 +395,11 @@ include("transform_boundary.jl")
             integration_order::Int,
             material::Union{Material, Vector{Material}},
             dim::Int,
-            connect_elem_phase::Union{Nothing, Vector{Int}};
+            connect_elem_phase::Union{Nothing, Vector{Int}},
+            Geometric_Data;
             NodalForces = nothing,
-            BoundaryFace = nothing)
+            BoundaryFace = nothing,
+            PointForces = nothing)
 
             # ==================== PHASE HANDLING ==================== #
                 is_composite = material isa Vector{Material}
@@ -425,7 +427,7 @@ include("transform_boundary.jl")
 
             # ==================== PROBLEM SETUP ==================== #
                 total_dofs = size(nodes, 1) * dofs_per_node
-                compute_F = !isnothing(NodalForces) || !isnothing(BoundaryFace) ||
+                compute_F = !isnothing(NodalForces) || !isnothing(BoundaryFace) || !isnothing(PointForces) ||
                             any(should_apply_internal_force(m) for m in (material isa Vector ? material : [material]))
                 compute_BoundaryFace = !isnothing(BoundaryFace)
 
@@ -454,33 +456,34 @@ include("transform_boundary.jl")
                 end
 
             # ==================== PRECOMPUTATION ==================== #
-                gauss_data = shape_data(element_type, integration_order, dim)
-                jacobian_cache = jacobian_data(connectivity, nodes, gauss_data, dim)
+        
+                gauss_data = Geometric_Data.gauss_data
+                jacobian_cache = Geometric_Data.jacobian_cache
+                B_dicts = Geometric_Data.B_dicts
                 ref_mat = is_composite ? material[1] : material
-                B_dicts = build_B_matrices(nodes, connectivity, ref_mat, gauss_data, jacobian_cache)
                 global_dofs = assemble_global_dofs(connectivity, ref_mat)
 
                 # ==================== GLOBAL MATRIX  ==================== #
-                I = Vector{Int}(undef, total_entries)
-                J = Vector{Int}(undef, total_entries)
-                V = Vector{Float64}(undef, total_entries)
+                    I = Vector{Int}(undef, total_entries)
+                    J = Vector{Int}(undef, total_entries)
+                    V = Vector{Float64}(undef, total_entries)
 
                 # ==================== FORCE MATRIX ==================== #
-                if compute_F
-                    if length(ref_mat.type) != 1 && ref_mat.symmetry == :out_of_plane
-                        # For coupled out-of-plane systems, create separate force storage per field
-                        local_F = Dict{Symbol, Vector{Vector{Float64}}}()
-                        for bt in ref_mat.B_types
-                            local_F[bt] = [zeros(total_dofs) for _ in 1:Threads.nthreads()]
+                    if compute_F
+                        if length(ref_mat.type) != 1 && ref_mat.symmetry == :out_of_plane
+                            # For coupled out-of-plane systems, create separate force storage per field
+                            local_F = Dict{Symbol, Vector{Vector{Float64}}}()
+                            for bt in ref_mat.B_types
+                                local_F[bt] = [zeros(total_dofs) for _ in 1:Threads.nthreads()]
+                            end
+                        else
+                            # For all other cases, use single force storage
+                            local_F = Dict{Symbol, Vector{Vector{Float64}}}()
+                            local_F[:default] = [zeros(total_dofs) for _ in 1:Threads.nthreads()]
                         end
                     else
-                        # For all other cases, use single force storage
-                        local_F = Dict{Symbol, Vector{Vector{Float64}}}()
-                        local_F[:default] = [zeros(total_dofs) for _ in 1:Threads.nthreads()]
+                        local_F = nothing
                     end
-                else
-                    local_F = nothing
-                end
                 
             # ==================== ELEMENT PROCESSING ==================== #
                 Threads.@threads for e in 1:nb_elm
@@ -596,9 +599,31 @@ include("transform_boundary.jl")
                             push!(global_F_fields, reduce(+, local_F[bt]))
                         end
                         return global_K, global_F_fields...
+                         # Add point forces for out-of-plane systems (not supported yet)
+                        if !isnothing(PointForces)
+                            error("PointForces not yet supported for out-of-plane coupled systems")
+                        end
+                    return global_K, global_F_fields...
                     else
                         # For all other cases: return single force vector
                         global_F = reduce(+, local_F[:default])
+                         # ===== ADD CONCENTRATED FORCES HERE ===== #
+                    if !isnothing(PointForces)
+                        F_point = zeros(total_dofs)
+                        for (node, f_vec) in PointForces
+                            # Calculate base DOF index for this node
+                            base_dof = (node - 1) * dofs_per_node
+                            
+                            if length(f_vec) != dofs_per_node
+                                error("Force vector length mismatch for node $node: Expected $dofs_per_node DOFs")
+                            end
+                            
+                            # Add force vector to global force
+                            F_point[base_dof+1:base_dof+dofs_per_node] .+= f_vec
+                        end
+                        global_F .+= F_point
+                    end
+                    # ===== END CONCENTRATED FORCES ===== #
                         return global_K, global_F
                     end
                 else
@@ -691,21 +716,21 @@ include("transform_boundary.jl")
 
         # ==================== VOLUME FORCE COMPUTATIONS ==================== #
             function compute_volume_force_vector(N, scaling, fᵥ, dim, n_nodes)
-                f = zeros(eltype(N), n_nodes)
-
-                @inbounds for i in 1:n_nodes
+                f = zeros(eltype(N), n_nodes )
+                Nn = size(N,1)
+                @inbounds for i in 1:Nn
                     Ni = N[i] * scaling
                     base = (i-1)*dim
-                     for d in 1:dim
+                    @simd for d in 1:dim
                         f[base + d] = Ni * fᵥ[d]
                     end
                 end
                 return f
             end
 
-            function compute_volume_force_scalar(N, scaling, fᵥ, n_nodes)
-               f = zeros(eltype(N), n_nodes)
-                @inbounds for i in eachindex(N)
+            function compute_volume_force_scalar(N, scaling, fᵥ)
+               f = zeros(eltype(N), length(N))
+                @inbounds @simd for i in eachindex(N)
                     f[i] = N[i] * fᵥ * scaling
                 end
                 return f
@@ -741,16 +766,23 @@ include("transform_boundary.jl")
                 face_coords::Matrix{Float64},
                 n)
               
+                f = zeros(size(N_face, 1))
+
                 x_qp = compute_x_qp(N_face, face_coords)
                 fₜ_val = fₜ isa AbstractTraction ? evaluate(fₜ, x_qp) : zeros(dim)
-                return (N_face' * (-fₜ_val * n)) * scaling
+                fₜ_val = - fₜ_val * n
+                
+                f = N_face' * fₜ_val * scaling
+              
+                return f
             end
 
             function compute_surface_force_scalar(N_face, scaling, fₜ, face_conn, elem_conn)
+                f = zeros(size(N_face, 1))
                 x_qp = compute_x_qp(N_face, face_coords)
                 fₜ_val = fₜ isa AbstractTraction ? evaluate(fₜ, x_qp) : zeros(dim)
                 f = N_face * fₜ_val * scaling
-                return N_face * fₜ_val * scaling
+                return f
             end
             # Helper function for permutation vector
             function get_node_wise_permutation(material::Material, n_nodes::Int)
@@ -794,10 +826,10 @@ include("transform_boundary.jl")
                 B = B_dict[:strain]
                 n_dofs = size(B[1], 2)
                 dim = material.dim            
-
+                f = zeros(n_dofs)
                 # Volume force
                 if !isnothing(forces.fᵥ)
-                    f = zeros(n_dofs)
+                   
                     for qp in 1:length(gauss_data.weights)
                         detJ, _ = jac_data[qp]
                         scaling =  abs(detJ) * gauss_data.weights[qp]
@@ -818,7 +850,7 @@ include("transform_boundary.jl")
                 
                 # Traction force
                 if !isnothing(forces.fₜ)    
-                    f =  zeros(length(face_conn))
+                    f =  zeros(n_dofs)
                     center = mean(face_coords, dims=1)
                     for qp in 1:length(gauss_fdata.weights)
                         N_face = gauss_fdata.N[qp]                           
@@ -924,8 +956,6 @@ include("transform_boundary.jl")
                       # Initialize separate force vectors
                     f_u = zeros(n_dofs_u + n_dofs_ϕ)  # Mechanical forces
                     f_ϕ = zeros(n_dofs_ϕ + n_dofs_u)  # Electrical forces
-                    F_u =  zeros(n_dofs_u)
-                    F_ϕ =  zeros(n_dofs_ϕ)
                     for qp in 1:length(gauss_data.weights)
                         detJ, _ = jac_data[qp]
                         scaling = abs(detJ) * gauss_data.weights[qp]
@@ -952,10 +982,8 @@ include("transform_boundary.jl")
                         else
                           
                             N = gauss_data.N[qp]
-                            F_u += compute_volume_force_vector(N, scaling, forces.fᵥ, dim, n_dofs_u)
-                            F_ϕ += compute_volume_force_scalar(N, scaling, forces.fᵥ, n_dofs_ϕ)
-                            f += vcat(F_u, F_ϕ)
-                            fe = f
+                            f_u += compute_volume_force_vector(N, scaling, forces.fᵥ, dim, n_dofs)
+                            f_ϕ += compute_volume_force_vector(N, scaling, forces.fᵥ, dim, n_dofs)
                         end
                     end
                 end
