@@ -6,7 +6,7 @@ include("transform_boundary.jl")
 # =============================================
 #  Element Stiffness computation
 # =============================================
-    # Dispatch function remains the same
+    # Dispatch function 
         function compute_element_stiffness(material::Material, B_dict::Dict, jacobian_data, gauss_data)
             T = resolve_material_type(material)
             return compute_element_stiffness(Val(T), material, B_dict, jacobian_data, gauss_data)
@@ -157,7 +157,7 @@ include("transform_boundary.jl")
             end
 
             return [K_vv  K_vp; 
-                    K_vp' zeros(n_dofs_p, n_dofs_p)]  # Saddle-point system
+                    K_vp' zeros(n_dofs_p, n_dofs_p)]  
         end       
     # =============================================
     # Helper Functions for  Element Stiffness  
@@ -165,7 +165,7 @@ include("transform_boundary.jl")
 
         function permute_element_matrix(K_block, material::Material, n_nodes::Int)
             fields = material.B_types
-            length(fields) == 1 && return K_block  # No permutation needed for single-field
+            length(fields) == 1 && return K_block  
             
             # Get DOFs per field (e.g., 2 for strain, 1 for electric)
             dofs_per_field = [get_dofs_per_node(Material(material.type, material.dim, material.symmetry, material.properties, Vector{AbstractMatrix{Real}}(), [bt],nothing)) for bt in fields]

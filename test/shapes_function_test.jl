@@ -1,7 +1,6 @@
 using HomoLib: shape_functions
 using Test
 using LinearAlgebra
-using Printf
 using Dates
 
 # Helper function to safely sum gradients and check their properties
