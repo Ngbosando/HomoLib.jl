@@ -1,4 +1,4 @@
-using HomoLib: jacobian_data,shape_data,Material,build_B_matrices
+using HomoLib: jacobian_data,shape_data,material_def,build_B_matrices
 using Test
 using LinearAlgebra
 
