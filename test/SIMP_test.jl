@@ -15,6 +15,32 @@ using WriteVTK
         return boundary_nodes[argmin(distances)]
     end
 
+    function update_density(ρ, dC, areas, ρ_min, V_f, total_volume; move=0.2, η=0.5)
+        n_elem = length(ρ)
+        ρ_new = similar(ρ)
+        l1, l2 = 0.0, 1e9
+
+        while (l2 - l1) > 1e-6
+            λ = 0.5*(l1 + l2)
+            base = -dC ./ (λ .* areas)
+            base_clamped = max.(base, 0.0)
+            ρ_candidate = clamp.(ρ .* base_clamped .^ η, ρ_min, 1.0)
+            vol_frac = sum(ρ_candidate .* areas) / total_volume
+
+            vol_frac > V_f ? (l1 = λ) : (l2 = λ)
+        end
+
+        λ = 0.5*(l1 + l2)
+        base = -dC ./ (λ .* areas)
+        base_clamped = max.(base, 0.0)
+        ρ_candidate = clamp.(ρ .* base_clamped .^ η, ρ_min, 1.0)
+
+        for e in 1:n_elem
+            ρ_new[e] = clamp(ρ_candidate[e], ρ[e] - move, ρ[e] + move)
+        end
+        return ρ_new
+    end
+
     function plot_density(nodes, connect, ρ, title_str)
         fig = Figure()
         ax = Axis(fig[1, 1], title=title_str, aspect=DataAspect())
@@ -62,14 +88,14 @@ using WriteVTK
         end
 
         # Add a legend with better placement and styling
-        Legend(fig[1, 2], ax, "Legend"; tellwidth=false, tellheight=false, framevisible=true, bgcolor=:white, labelsize=18)
+        Legend(fig[1, 2], ax, "Legend"; tellwidth=false, tellheight=false, framevisible=true, backgroundcolor=:white, labelsize=18)
 
         display(fig)
         save("compliance_history.png", fig)
         return fig
     end
 
-    function write_vtk_results(iter, nodes, connect, ρ_vec)
+    +function write_vtk_results(iter, nodes, connect, ρ_vec)
         output_dir = "vtk_results"
         !isdir(output_dir) && mkdir(output_dir)
         n_nodes = size(connect, 2)
