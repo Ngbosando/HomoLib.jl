@@ -14,6 +14,4 @@ include("patch_test.jl")
 include("recover_field_values_test.jl")
 include("shapes_function_test.jl")
 include("test_global_assembly.jl")
-
-# Not good yet
 include("SIMP_test.jl")
