@@ -9,7 +9,7 @@ using Random, Tensors, Combinatorics
 using GeometryBasics, CairoMakie, Dates
 import FastGaussQuadrature.gausslegendre, MAT
 using StatsBase,BenchmarkTools, DelaunayTriangulation
-
+using WriteVTK
 
 
 struct Material 
