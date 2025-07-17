@@ -233,44 +233,44 @@
     # ----------------------
     # B-Matrix Assembly
     # ----------------------
-    function build_B_matrices(
-        nodes::Union{Matrix{Float64}, Vector{Float64}},
-        connectivity::Matrix{Int},
-        material::Material,
-        gauss_data,
-        jacobian_data)
+        function build_B_matrices(
+            nodes::Union{Matrix{Float64}, Vector{Float64}},
+            connectivity::Matrix{Int},
+            material::Material,
+            gauss_data,
+            jacobian_data)
 
-        dim = material.dim
-        n_elem = size(connectivity, 1)
-        n_nodes_per_elem = size(connectivity, 2)
-        B_data = Vector{Dict{Symbol, Vector{Matrix{Float64}}}}(undef, n_elem)
-        
-        Threads.@threads for e in 1:n_elem
-            elem_jacobian = jacobian_data[e] 
-            B_dict = Dict{Symbol, Vector{Matrix{Float64}}}()
-
-            # Build B-matrices for each required type
-            for B_type in material.B_types
-                B = if B_type == :strain
-                    build_strain_B(elem_jacobian, gauss_data, dim, n_nodes_per_elem)
-                elseif B_type ∈ (:strain_rate, :gradient, :electric_field, 
-                                :pressure, :temperature_gradient, :fluid_velocity)
-                    build_gradient_B(elem_jacobian, gauss_data, dim, n_nodes_per_elem)
-                else
-                    error("Unsupported B-type: $B_type")
-                end
-
-                # Special handling for out-of-plane symmetry
-                if material.symmetry == :out_of_plane 
-                    for i in eachindex(B)
-                        B[i] = vcat(B[i], zeros(1, size(B[i], 2)))
-                    end
-                end
+            dim = material.dim
+            n_elem = size(connectivity, 1)
+            n_nodes_per_elem = size(connectivity, 2)
+            B_data = Vector{Dict{Symbol, Vector{Matrix{Float64}}}}(undef, n_elem)
             
-                B_dict[B_type] = B
-            end
+            Threads.@threads for e in 1:n_elem
+                elem_jacobian = jacobian_data[e] 
+                B_dict = Dict{Symbol, Vector{Matrix{Float64}}}()
 
-            B_data[e] = B_dict
+                # Build B-matrices for each required type
+                for B_type in material.B_types
+                    B = if B_type == :strain
+                        build_strain_B(elem_jacobian, gauss_data, dim, n_nodes_per_elem)
+                    elseif B_type ∈ (:strain_rate, :gradient, :electric_field, 
+                                    :pressure, :temperature_gradient, :fluid_velocity)
+                        build_gradient_B(elem_jacobian, gauss_data, dim, n_nodes_per_elem)
+                    else
+                        error("Unsupported B-type: $B_type")
+                    end
+
+                    # Special handling for out-of-plane symmetry
+                    if material.symmetry == :out_of_plane 
+                        for i in eachindex(B)
+                            B[i] = vcat(B[i], zeros(1, size(B[i], 2)))
+                        end
+                    end
+                
+                    B_dict[B_type] = B
+                end
+
+                B_data[e] = B_dict
+            end
+            return B_data
         end
-        return B_data
-    end

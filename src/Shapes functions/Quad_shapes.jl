@@ -82,31 +82,39 @@ function gmsh_ordering(n::Int)
     pos = 1
     while !isempty(stack)
         (i0, j0, nlayer) = popfirst!(stack)
-        # 1. Corners (counterclockwise)
-        idx[pos]     = (j0    )*n + (i0    ) + 1; pos += 1
-        idx[pos]     = (j0    )*n + (i0+nlayer-1) + 1; pos += 1
-        idx[pos]     = (j0+nlayer-1)*n + (i0+nlayer-1) + 1; pos += 1
-        idx[pos]     = (j0+nlayer-1)*n + (i0    ) + 1; pos += 1
-        # 2. Edges (excluding corners)
-        # bottom
-        for i in 1:nlayer-2
-            idx[pos] = (j0    )*n + (i0+i) + 1; pos += 1
-        end
-        # right
-        for j in 1:nlayer-2
-            idx[pos] = (j0+j)*n + (i0+nlayer-1) + 1; pos += 1
-        end
-        # top
-        for i in nlayer-2:-1:1
-            idx[pos] = (j0+nlayer-1)*n + (i0+i) + 1; pos += 1
-        end
-        # left
-        for j in nlayer-2:-1:1
-            idx[pos] = (j0+j)*n + (i0    ) + 1; pos += 1
-        end
-        # 3. Internal 
-        if nlayer > 2
-            pushfirst!(stack, (i0+1, j0+1, nlayer-2))
+        if nlayer == 1
+            # Handle single node: assign once
+            idx[pos] = j0 * n + i0 + 1
+            pos += 1
+        else
+            # Corners (counter-clockwise)
+            idx[pos] = j0 * n + i0 + 1;          pos += 1  # Bottom-left
+            idx[pos] = j0 * n + (i0+nlayer-1) + 1; pos += 1  # Bottom-right
+            idx[pos] = (j0+nlayer-1)*n + (i0+nlayer-1) + 1; pos += 1  # Top-right
+            idx[pos] = (j0+nlayer-1)*n + i0 + 1;          pos += 1  # Top-left
+
+            if nlayer > 2
+                # Edges (excluding corners)
+                # Bottom edge (left to right)
+                for i in 1:(nlayer-2)
+                    idx[pos] = j0 * n + (i0+i) + 1; pos += 1
+                end
+                # Right edge (bottom to top)
+                for j in 1:(nlayer-2)
+                    idx[pos] = (j0+j)*n + (i0+nlayer-1) + 1; pos += 1
+                end
+                # Top edge (right to left)
+                for i in (nlayer-2):-1:1
+                    idx[pos] = (j0+nlayer-1)*n + (i0+i) + 1; pos += 1
+                end
+                # Left edge (top to bottom)
+                for j in (nlayer-2):-1:1
+                    idx[pos] = (j0+j)*n + i0 + 1; pos += 1
+                end
+
+                # Recursively process interior
+                pushfirst!(stack, (i0+1, j0+1, nlayer-2))
+            end
         end
     end
     return idx
