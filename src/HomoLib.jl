@@ -6,9 +6,9 @@ using Base.Threads, StaticArrays, ProgressMeter
 using NLsolve, IterativeSolvers, LoopVectorization
 using Gmsh: gmsh
 using Random, Tensors, Combinatorics
-using GeometryBasics, CairoMakie, DelaunayTriangulation
+using GeometryBasics, CairoMakie, GLMakie 
 import FastGaussQuadrature.gausslegendre, MAT
-using StatsBase,BenchmarkTools
+using StatsBase,BenchmarkTools, DelaunayTriangulation
 
 
 
