@@ -1,4 +1,3 @@
-using Revise 
 using HomoLib: material_def,Material
 using LinearAlgebra, StaticArrays, SparseArrays, Tensors
 

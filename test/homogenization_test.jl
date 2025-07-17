@@ -1,4 +1,3 @@
-using Revise
 using LinearAlgebra, SparseArrays, Statistics
 using CairoMakie, Test
 using HomoLib: generate_transfinite_plate_with_inclusions,

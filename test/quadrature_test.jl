@@ -1,4 +1,3 @@
-using Revise
 using HomoLib: integration_rule
 using Test
 

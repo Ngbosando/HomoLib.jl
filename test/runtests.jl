@@ -15,5 +15,3 @@ include("recover_field_values_test.jl")
 include("shapes_function_test.jl")
 include("test_global_assembly.jl")
 include("SIMP_test.jl")
-using Pkg
-"GLMakie" ∈ keys(Pkg.installed())

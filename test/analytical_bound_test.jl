@@ -1,4 +1,3 @@
-using Revise
 using HomoLib: theorical_bound
 using Test
 using CairoMakie

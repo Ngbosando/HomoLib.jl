@@ -1,4 +1,3 @@
-using Revise
 using HomoLib: material_def, assemble_global_matrix, plaque,
             extract_border_nodes_from_elements, force_computation,
             shape_data, jacobian_data, build_B_matrices, assemble_global_dofs,

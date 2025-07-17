@@ -1,4 +1,3 @@
-using Revise
 using HomoLib: jacobian_data,shape_data,Material,build_B_matrices
 using Test
 using LinearAlgebra

@@ -1,4 +1,3 @@
-using Revise 
 using Test
 using HomoLib: material_def, compute_effective_property
  

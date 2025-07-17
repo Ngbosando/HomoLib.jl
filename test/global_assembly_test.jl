@@ -1,4 +1,3 @@
-using Revise
 using HomoLib: material_def, assemble_global_matrix,
             shape_data,jacobian_data,build_B_matrices
 using LinearAlgebra, Statistics

@@ -1,4 +1,3 @@
-using Revise
 using HomoLib:material_def,assemble_global_matrix
 using LinearAlgebra
 using CairoMakie

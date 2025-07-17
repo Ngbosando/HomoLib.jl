@@ -1,4 +1,3 @@
-using Revise
 using HomoLib: assemble_global_matrix, material_def,
             shape_data,jacobian_data,build_B_matrices
 using Test
