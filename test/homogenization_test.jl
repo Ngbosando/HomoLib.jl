@@ -10,42 +10,6 @@ using HomoLib: generate_transfinite_plate_with_inclusions,
 # =============================================
 # Main workflow
 # =============================================
-function main()
-    Elem = ElemData(:Quad36, 5*2, 5)
-    mesh_non_poro = setup_mesh(;
-        width=1.0, height=1.0,
-        volume_fraction=0.6, n_inclusions=1,
-        Elem, node_divisions=(3, 3), shape=:circle,
-        output_file="Test_plate_with_inclusions_non_poro.msh",
-        voids=false  # Filled inclusions
-    )
-  
-    # Mesh for poro case (void inclusions)
-    mesh_poro = setup_mesh(;
-        width=1.0, height=1.0,
-        volume_fraction=0.2, n_inclusions=1,
-        Elem, node_divisions=(10, 5), shape=:circle,
-        output_file="Test_plate_with_inclusions_poro.msh",
-        voids=true  # Void inclusions
-    )
-    
-
-    println("thermal start")
-    κ_eff     = run_thermal_case(mesh_non_poro, Elem)
-    @info "Thermal effective conductivity:" κ_eff
-
-    println("elastic start")
-    C_eff     = run_elastic_case(mesh_non_poro, Elem)
-    @info "Elastic effective stiffness tensor:" C_eff
-
-    println("piezo start")
-    piezo_eff = run_piezo_case(mesh_non_poro, Elem)
-    @info "Piezoelectric effective properties:" piezo_eff
-
-    println("poro start")
-    Biot_tensor = run_poro_case(mesh_poro, Elem)
-    @info "porileasticity effective properties:" Biot_tensor
-end
 
 # =============================================
 # Mesh generation
@@ -174,7 +138,7 @@ function run_thermal_case(mesh::MeshData, Elem::ElemData)
         2,
         Geometric_Data
     )
-    return κ_eff
+    return κ_eff.K
 end
 
 # =============================================
@@ -507,7 +471,6 @@ function run_poro_case(mesh::MeshData, Elem::ElemData)
     br = 1 .- kr ./ κ_s
     i_nd = ( 3 * f) / (4 * μ_s)
     i_nr = (br - f) / κ_s
-    # elseif haskey(mat.properties, :α_p) && :pressure ∉ mat.type
     return (C=props.C, B=Β_eff, b_dilute=b, b_refine=br, solid_biot = i_n,s_biot_dilute =i_nd[1], s_biot_refine=i_nr[1] )
 end
 
@@ -522,105 +485,150 @@ end
 #         output_file="Test_plate_with_inclusions.msh",
 #         voids = false
 #     );
-function run_stokesFlow_case(mesh::MeshData, Elem::ElemData)
-    # Material definition
-    C1 = [8.0 4.4 0 4.4; 4.4 8.0 0 4.4; 0 0 3.6 0; 4.4 4.4 0 8]
-    C2 = [154.837 83.237 0 82.712; 83.237 154.837 0 82.712;
-          0 0 35.8 0; 82.712 82.712 0 131.39]
-    e_tensor1 = zeros(3,4)
-    e_tensor2 = zeros(3,4); e_tensor2[3,1:2] .= -2.120582; e_tensor2[3,4] = 9.52183
-    ϵ1 = diagm(0 => [3.72e-2, 3.72e-2, 3.72e-2])
-    ϵ2 = diagm(0 => [4.065, 4.065, 2.079])
+# function run_stokesFlow_case(mesh::MeshData, Elem::ElemData)
+#     #   place holder
+# end
 
-    piezo_mat1 = material_def([:elastic, :electric], 2, :out_of_plane,
-                               C=C1, e=e_tensor1, ϵ=ϵ1)
-    piezo_mat2 = material_def([:elastic, :electric], 2, :out_of_plane,
-                               C=C2, e=e_tensor2, ϵ=ϵ2)
+# Run Test
+# Reference: Yvonnet, Computational Homogenization of Heterogeneous Materials 
+# with Finite Elements (2019), Periodic BCs, Fine Mesh
 
-    # Precompute data no poro
-    gauss_data = shape_data(ElemData.type, ElemData.int_order, ElemData.dim)
-    jacobian_cache = jacobian_data(MeshData.connect, MeshData.nodes, gauss_data, ElemData.dim)
-    B_dicts = build_B_matrices(MeshData.nodes, MeshData.connect, Flow_mat, gauss_data, jacobian_cache)
-    Geometric_Data = (gauss_data = gauss_data,jacobian_cache = jacobian_cache,B_dicts = B_dicts )
-
-    # Assemble coupled stiffness
-    K_piezo, F_u, F_ϕ = assemble_global_matrix(
-        mesh.elements, mesh.nodes,
-        Elem.type, Elem.int_order,
-        [piezo_mat1, piezo_mat2],
-        2, mesh.type_elem
+# Thermal Conductivity Tests
+@testset "Thermal Conductivity Verification" begin
+    # Reference values from Table 3.1 (PER columns for periodic BCs)
+    ref_values = Dict(
+        1e-3 => 1.000,
+        0.05 => 1.0672,
+        0.1 => 1.1419,
+        0.2 => 1.3055,
+        0.3 => 1.4989,
+        0.4 => 1.7279,
+        0.5 => 2.0104,
+        0.6 => 2.3704,
+        0.7 => 2.8643
     )
-    isapprox(K_piezo, K_piezo', rtol=1e-16) || error("K_piezo is not symmetric")
+   
+    # Test multiple volume fractions
+    for (vf, expected_κ) in ref_values
 
-    # Dirichlet BC cases
-    dirichlet_u = [
-        [1.0 0.0; 0.0 0.0; 0.0 0.0],
-        [0.0 0.0; 0.0 1.0; 0.0 0.0],
-        [0.0 0.5; 0.5 0.0; 0.0 0.0],
-        [0.0 0.0; 0.0 0.0; 0.0 0.0]
-    ]
-    dirichlet_ϕ = [
-        [0.0 0.0; 0.0 0.0; 1.0 0.0],
-        [0.0 0.0; 0.0 0.0; 0.0 1.0],
-        [0.0 0.0; 0.0 0.0; 0.0 0.0]
-    ]
-    bc_u = [HomogenizationBC(:periodic,val,(mesh.master,mesh.slave),nothing,nothing,mesh.nodes,3)
-            for val in dirichlet_u]
-    bc_ϕ = [HomogenizationBC(:periodic,val,(mesh.master,mesh.slave),nothing,nothing,mesh.nodes,3)
-            for val in dirichlet_ϕ]
-
-    # Solve mechanical and electric loads
-    FU = zeros(size(K_piezo,1))
-    U1 = solve!(K_piezo, FU, FU, [bc_u[1]])
-    U2 = solve!(K_piezo, FU, FU, [bc_u[2]])
-    U3 = solve!(K_piezo, FU, FU, [bc_u[3]])
-    U4 = solve!(K_piezo, F_u, FU, [bc_u[4]])
-    U5 = solve!(K_piezo, FU, FU, [bc_ϕ[1]])
-    U6 = solve!(K_piezo, FU, FU, [bc_ϕ[2]])
-    U7 = solve!(K_piezo, F_ϕ, FU, [bc_ϕ[3]])
-
-    # Energy verification
-    function verify_energy(K, U, F)
-        W_int = 0.5 * U' * K * U
-        W_ext = 0.5 * U' * F
-        @assert abs(W_int - W_ext) < 1e-10*abs(W_ext)
+        Elem = ElemData(:Quad36, 10, 5)  # Fine mesh
+        mesh = setup_mesh(;
+        width=1.0, height=1.0,
+        volume_fraction=vf, n_inclusions=1,
+        Elem, node_divisions=(3, 3), shape=:circle,
+        output_file="Test_plate_with_inclusions_non_poro.msh",
+        voids=false  # Filled inclusions
+        )
+        
+        κ_eff = run_thermal_case(mesh, Elem)
+   
+        @test isapprox(κ_eff[1,1], expected_κ, rtol=0.01)  # 1% tolerance
     end
-    verify_energy(K_piezo, U4, F_u)
-    verify_energy(K_piezo, U7, F_ϕ)
-
-    # Visualization displacement and fields
-    magn   = 0.3
-    Ux     = U1[1:3:end]; Uy = U1[2:3:end]; Up = U1[3:3:end]
-    Nx2    = mesh.nodes[:,1] .+ Ux*magn; Ny2 = mesh.nodes[:,2] .+ Uy*magn
-    nodes2 = hcat(Nx2, Ny2)
-    stress_strain = recover_field_values(
-        mesh.elements, nodes2,
-        [piezo_mat1, piezo_mat2],
-        (U=U5, ϕ=U5),
-        mesh.type_elem, Elem.type, Elem.int_order, 2
-    )
-    σ₁₁, σ₂₂, σ₁₂ = stress_strain.stress[:,1], stress_strain.stress[:,2], stress_strain.stress[:,3]
-    ϵ₁₁, ϵ₂₂, ϵ₁₂ = stress_strain.strain[:,1], stress_strain.strain[:,2], stress_strain.strain[:,3]
-    E₁, E₂, E₃   = stress_strain.elec[:,1], stress_strain.elec[:,2], stress_strain.elec[:,3]
-    plot_champ_scalaire(nodes2, mesh.elements, E₁, Elem.type)
-    plot_champ_scalaire(nodes2, mesh.elements, E₂, Elem.type)
-    plot_champ_scalaire(nodes2, mesh.elements, E₃, Elem.type)
-    plot_champ_scalaire(nodes2, mesh.elements, ϵ₁₁, Elem.type)
-    plot_champ_scalaire(nodes2, mesh.elements, ϵ₂₂, Elem.type)
-    plot_champ_scalaire(nodes2, mesh.elements, ϵ₁₂, Elem.type)
-
-    # Compute effective piezoelectric properties
-    solver_results = (
-        U_mech = [U1, U2, U3, U4, U5, U6, U7],
-        V_elec = [U1, U2, U3, U4, U5, U6, U7]
-    )
-    props = compute_effective_property(
-        [piezo_mat1, piezo_mat2], mesh.elements, mesh.nodes,
-        mesh.type_elem, solver_results, Elem.type, Elem.int_order, 2
-    )
-    return (C=props.C, e=props.e, ϵ=props.ϵ)
 end
-# Run script
-main();
 
+# Elasticity Tests
+@testset "Elasticity Verification" begin
+    # Reference values from KUBC/PER table for f=0.6
+    ref_values = (
+        C1111 = (10.961, 11.608),  # (PER, KUBC)
+        C1122 = (5.606, 5.495),
+        C1212 = (0.955, 2.213),
+        C3333 = (34.554, 34.643),
+        C1133 = (5.893, 6.047)
+    )
+    
+    Elem = ElemData(:Quad36, 10, 5)  # Fine mesh
+    mesh = setup_mesh(;
+        width=1.0, height=1.0,
+        volume_fraction=0.6, n_inclusions=1,
+        Elem, node_divisions=(3, 3), shape=:circle,
+        output_file="Test_plate_with_inclusions_non_poro.msh",
+        voids=false  
+    )
+    
+    C_eff = run_elastic_case(mesh, Elem)
+    
+    # Test periodic BC results (first value in tuples)
+    @test isapprox(C_eff[1,1], ref_values.C1111[1], rtol=0.01)
+    @test isapprox(C_eff[1,2], ref_values.C1122[1], rtol=0.01)
+    @test isapprox(C_eff[3,3], ref_values.C1212[1], rtol=0.02)  # Higher tolerance for shear
+    @test isapprox(C_eff[4,4], ref_values.C3333[1], rtol=0.01)
+    @test isapprox(C_eff[1,4], ref_values.C1133[1], rtol=0.01)
+end
 
+# Piezoelectricity Tests
+@testset "Piezoelectricity Verification" begin
+    # Reference values from Table 5.1 (f=0.6, fine mesh Per. b.c.)
+    ref_values = (
+        C = [25.36 8.71 0 11.92;
+             8.71 25.36 0 11.92;
+             0 0 0 0;
+             11.92 11.92 0 54.62],
+        e = [0 0 0 0;
+             0 0 0 0;
+             -0.20 -0.20 0 6.45],
+        ϵ = [0.155 0 0;
+             0 0.155 0;
+             0 0 1.281]
+    )
+    
+    Elem = ElemData(:Quad36, 10, 5)  # Fine mesh
+    mesh = setup_mesh(;
+        width=1.0, height=1.0,
+        volume_fraction=0.6, n_inclusions=1,
+        Elem, node_divisions=(3, 3), shape=:circle,
+        output_file="Test_plate_with_inclusions_non_poro.msh",
+        voids=false  
+    )
+    
+    results = run_piezo_case(mesh, Elem)
+
+    # Test stiffness components
+    @test isapprox(results.C[1,1], ref_values.C[1,1], rtol=0.01)
+    @test isapprox(results.C[1,2], ref_values.C[1,2], rtol=0.01)
+    @test isapprox(results.C[1,3], ref_values.C[1,3], atol=1e-10)
+    @test isapprox(results.C[4,4], ref_values.C[4,4], rtol=0.01)
+
+  
+    # Test piezoelectric coefficients
+    @test isapprox(results.e[3,1], ref_values.e[3,1], rtol=0.05)  # e311
+    @test isapprox(results.e[3,3], ref_values.e[3,3], atol=1e-10)  # e312
+    @test isapprox(results.e[3,4], ref_values.e[3,4], rtol=0.05)  # e333
+    
+    # Test dielectric coefficients
+    @test isapprox(results.ϵ[1,1], ref_values.ϵ[1,1], rtol=0.02)
+    @test isapprox(results.ϵ[3,3], ref_values.ϵ[3,3], rtol=0.01)
+end
+
+# Poroelasticity Tests
+@testset "Poroelasticity Verification" begin
+    # Analytical solution parameters
+    E = 10
+    ν = 1/3
+    α_p = 0.7
+    vf = 0.2  # Volume fraction
+    
+    # Analytical solutions
+    λ_s = E * ν / ((1 + ν) * (1 - 2ν))
+    μ_s = E / (2 * (1 + ν))
+    κ_s = λ_s + 2μ_s/3
+    b_analytical = α_p*(1 + (3κ_s)/(4μ_s))
+    
+    Elem = ElemData(:Quad36, 10, 5)  # Fine mesh
+    mesh = setup_mesh(;
+        width=1.0, height=1.0,
+        volume_fraction=0.2, n_inclusions=1,
+        Elem, node_divisions=(10, 5), shape=:circle,
+        output_file="Test_plate_with_inclusions_poro.msh",
+        voids=true  # Void inclusions
+    )
+    
+    results = run_poro_case(mesh, Elem)
+
+    #  Test Biot’s tensor Compare with analytical solution
+    @test isapprox(results.b_refine, results.B, rtol=0.05)
+    results.solid_biot
+    # Test  solid Biot modulus N with analytical solution
+    @test isapprox(results.solid_biot, results.s_biot_refine, rtol=0.07)
+  
+end

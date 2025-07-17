@@ -95,7 +95,7 @@ using WriteVTK
         return fig
     end
 
-    +function write_vtk_results(iter, nodes, connect, ρ_vec)
+    function write_vtk_results(iter, nodes, connect, ρ_vec)
         output_dir = "vtk_results"
         !isdir(output_dir) && mkdir(output_dir)
         n_nodes = size(connect, 2)
@@ -188,7 +188,7 @@ using WriteVTK
             ρ_min = 1e-3
             V_f = 0.4
             max_iter = 200
-            tol = 1e-3
+            tol = 1e-4
             niternp = 20
             pmax = 4.0
             p_current = 1.0
@@ -196,7 +196,7 @@ using WriteVTK
             gray_level_threshold = 0.01
 
         # Generate Mesh
-            nodes, elems, border_tag = plaque(b, h, lc, 51, 30, "patch2D", order, :quadrilateral; show_gui=false)
+            nodes, elems, border_tag = plaque(b, h, lc, 70, 30, "patch2D", order, :quadrilateral; show_gui=false)
             n_elem = size(elems,1)
             top_middle_node_idx = argmin((nodes[:, 1].- b/2).^2 + (nodes[:, 2].- h).^2)
 
@@ -300,7 +300,7 @@ using WriteVTK
                     old_compliance = compliance
                 
                 # Visualization and Output
-                    if iter % 1 == 0 || iter == 1 || change < tol
+                    if iter % 20 == 0 || iter == 1 || change < tol
                         title_str = "Iter $iter: p=$p_current, C=$(round(compliance, digits=4)), Δρ=$change"
                         fig = plot_density(nodes, elems, ρ_vec, title_str)
                         display(fig)
@@ -320,8 +320,12 @@ using WriteVTK
         return ρ_vec, compliance_history
     end
 
-# Run Optimization
-ρ_opt, compliance_hist = topology_optimization_CB()
-
-plot_compliance_history(compliance_hist)
+@testset "SIMP Topology Optimization - Qualitative Verification" begin 
+    # Run optimization
+    ρ_opt, compliance_hist = topology_optimization_CB()
+    # Test Final volume fraction matches target
+    @test isapprox(mean(ρ_opt), 0.4, atol=0.05)  # Target V_f=0.4
+end
    
+
+    
