@@ -27,7 +27,9 @@ include("extract_border_nodes_from_elements.jl")
         node_div_inc,
         node_div_mat;
         voids=false,
-        show_gui=false
+        show_gui=false,
+        rdn=false
+
     )
 
     Generate a 2D plate with multiple inclusions using GMSH.
@@ -47,6 +49,7 @@ include("extract_border_nodes_from_elements.jl")
     # Keyword Arguments
     - "voids=false": Whether inclusions should be voids (default: false)
     - "show_gui=false": Whether to display the GMSH GUI (default: false)
+    - "rdn=false": Whether inclusions should be randomly distributed (default: false)
 
     # Returns
     Tuple containing:
@@ -75,7 +78,8 @@ function generate_transfinite_plate_with_inclusions(
     node_div_inc,
     node_div_mat;
     voids=false,
-    show_gui=false
+    show_gui=false,
+    rdn = false
 )
     # Initialization of Gmsh
     initialize_gmsh()
@@ -91,7 +95,8 @@ function generate_transfinite_plate_with_inclusions(
         plate_height,
         shape,
         N_inclu,
-        voids
+        voids,
+        rdn
     )
 
     # Creation of the plate surface with inclusions

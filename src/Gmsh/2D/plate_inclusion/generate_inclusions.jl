@@ -11,7 +11,8 @@
         node_div_inc,
         node_div_mat;
         voids=false,
-        show_gui=false
+        show_gui=false,
+        rdn=false
     )
 
     Generate a 2D plate with multiple inclusions using GMSH.
@@ -31,6 +32,7 @@
     # Keyword Arguments
     - "voids=false": Whether inclusions should be voids (default: false)
     - "show_gui=false": Whether to display the GMSH GUI (default: false)
+    - "rdn=false": Whether inclusions should be randomly distributed (default: false)
 
     # Returns
     Tuple containing:
@@ -52,7 +54,8 @@ function generate_inclusions(volume_fraction,
                           plate_height, 
                           shape, 
                           N_inclu,
-                          voids)
+                          voids,
+                          rdn)
 
     # ==============================================
     # PART 1: INITIALIZATION AND PARAMETERS
@@ -141,18 +144,20 @@ function generate_inclusions(volume_fraction,
                     continue
                 end
 
-            # Random point placement (disabled for now)
-                # xmin = margin_x
-                # xmax = plate_width - margin_x
-                # ymin = margin_y
-                # ymax = plate_height - margin_y
-                # x = xmin + (xmax - xmin)*rand()
-                # y = ymin + (ymax - ymin)*rand()
-
-            # Fixed point in the center (currently used)
+           
+            if rdn == true
+                # Random point placement 
+                xmin = margin_x
+                xmax = plate_width - margin_x
+                ymin = margin_y
+                ymax = plate_height - margin_y
+                x = xmin + (xmax - xmin)*rand()
+                y = ymin + (ymax - ymin)*rand()
+            else
+                # Fixed point in the center (currently used)
                 x = plate_width / 2
                 y = plate_height / 2
-
+            end
             # Attempt to create inclusion
                 result = create_inclusion(
                     shape,

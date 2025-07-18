@@ -34,7 +34,7 @@ end
 
 function setup_mesh(; width, height, volume_fraction,
                     n_inclusions, Elem::ElemData,
-                    node_divisions, shape, output_file, voids)  # Renamed activate -> voids
+                    node_divisions, shape, output_file, voids, rdn)  # Renamed activate -> voids
 
     ind_G, ind_D, ind_B, ind_H, ind_C,
     elements, Nₓ, Nᵧ, type_elem, _, boundary_element =
@@ -44,7 +44,8 @@ function setup_mesh(; width, height, volume_fraction,
             Elem.type, Elem.order,
             node_divisions[1], node_divisions[2];
             voids=voids,  # Pass voids parameter directly
-            show_gui=false
+            show_gui=false,
+            rdn=rdn  # Disable randomization for reproducibility
         )
   
     boundary_element = boundary_element
@@ -517,7 +518,8 @@ end
         volume_fraction=vf, n_inclusions=1,
         Elem, node_divisions=(3, 3), shape=:circle,
         output_file="Test_plate_with_inclusions_non_poro.msh",
-        voids=false  # Filled inclusions
+        voids=false,  # Filled inclusions
+        rdn=false  # Disable randomization for reproducibility
         )
         
         κ_eff = run_thermal_case(mesh, Elem)
@@ -543,7 +545,8 @@ end
         volume_fraction=0.6, n_inclusions=1,
         Elem, node_divisions=(3, 3), shape=:circle,
         output_file="Test_plate_with_inclusions_non_poro.msh",
-        voids=false  
+        voids=false,  # Filled inclusions
+        rdn=false  # Disable randomization for reproducibility  
     )
     
     C_eff = run_elastic_case(mesh, Elem)
@@ -578,7 +581,8 @@ end
         volume_fraction=0.6, n_inclusions=1,
         Elem, node_divisions=(3, 3), shape=:circle,
         output_file="Test_plate_with_inclusions_non_poro.msh",
-        voids=false  
+        voids=false,  # Filled inclusionsts
+        rdn=false  # Disable randomization for reproducibility  
     )
     
     results = run_piezo_case(mesh, Elem)
@@ -620,7 +624,8 @@ end
         volume_fraction=0.2, n_inclusions=1,
         Elem, node_divisions=(10, 5), shape=:circle,
         output_file="Test_plate_with_inclusions_poro.msh",
-        voids=true  # Void inclusions
+        voids=true,  # empty inclusions
+        rdn=false  # Disable randomization for reproducibility
     )
     
     results = run_poro_case(mesh, Elem)
