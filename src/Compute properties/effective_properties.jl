@@ -83,8 +83,9 @@ include("compute_flux.jl")
 
             # ========== Init Storage ========== #
             result_template = init_global_storage(materials, dim)
-            result_acc = [deepcopy(result_template) for _ in 1:Threads.nthreads()]
-            vol_acc = zeros(Threads.nthreads())
+            nthreads = Threads.nthreads()
+            result_acc = [deepcopy(result_template) for _ in 1:nthreads]
+            vol_acc = zeros(nthreads)
             global_dofs = assemble_global_dofs(elements, ref_mat)
 
         # ========== Main Loop ========== #
