@@ -78,7 +78,6 @@ using Dates
 using CairoMakie
 import FastGaussQuadrature.gausslegendre
 using MAT
-using StatsBase 
 using DelaunayTriangulation
 using BenchmarkTools
 using WriteVTK
