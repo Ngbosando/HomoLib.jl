@@ -1,5 +1,6 @@
 using Test
-using HomoLib: material_def, compute_effective_property
+using HomoLib: material_def, compute_effective_property,
+               shape_data, build_B_matrices, jacobian_data
  
 
 @testset "Effective Property (Thermal)" begin
@@ -28,8 +29,8 @@ solver_results = (U = (zeros(3), zeros(3)),)
 dim = 2
 # Precompute data
 gauss_data = shape_data(element_type, 1, dim)
-jacobian_cache = jacobian_data(elements, nodes, gauss_data, dim)
-B_dicts = build_B_matrices(nodes, elements, mat, gauss_data, jacobian_cache)
+jacobian_cache = jacobian_data(connectivity, nodes, gauss_data, dim)
+B_dicts = build_B_matrices(nodes, connectivity, mat, gauss_data, jacobian_cache)
 Geometric_Data = (gauss_data = gauss_data,jacobian_cache = jacobian_cache,B_dicts = B_dicts )
 # Compute effective conductivity
 

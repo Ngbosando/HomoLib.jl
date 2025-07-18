@@ -388,6 +388,60 @@ include("transform_boundary.jl")
     # =============================================
     #  Global Matrix Assembler
     # =============================================
+        """
+            HomoLib.FiniteElementAssembly
+
+            Core module for finite element matrix assembly and force computation.
+
+            # Key Components
+            1. "Element Stiffness Matrices": For various physics (elastic, thermal, piezoelectric, etc.)
+            2. "Element Mass Matrices": Consistent mass matrices for dynamic analysis
+            3. "Global Matrix Assembly": Efficient sparse matrix assembly with support for composites
+            4. "Force Vectors": Volume, surface, and point force computation
+
+            # Physics Models Supported
+            - Elasticity (linear, isotropic/orthotropic/anisotropic)
+            - Thermal conduction
+            - Piezoelectricity (coupled electro-mechanical)
+            - Poroelasticity (Biot theory)
+            - Stokes flow (incompressible viscous flow)
+            - Viscoelasticity (placeholder)
+
+            # Main Features
+            - "Material-aware assembly": Automatically handles different physics based on material properties
+            - "Composite materials": Supports multi-phase materials with element-wise phase assignment
+            - "Efficient computation": Thread-parallel assembly for large-scale problems
+            - "Special boundary handling": Surface tractions, heat fluxes, and point forces
+            - "Coupled physics": Handles multi-field problems (e.g., thermoelastic, piezoelectric)
+            - "Out-of-plane symmetry": Special handling for 2D generalized plane strain
+
+            # Core Functions
+            - compute_element_stiffness: Element stiffness matrix computation
+            - compute_element_mass: Consistent mass matrix computation
+            - assemble_global_matrix: Global stiffness matrix and force vector assembly
+            - compute_element_force: Element force vector computation
+
+            # Usage Example
+            ```julia
+            # Define material
+            mat = material_def([:elastic], 3, :isotropic, E=200e9, ν=0.3)
+
+            # Precompute geometric data
+            gauss_data = shape_data(Hex8(), 2, 3)
+            jac_data = jacobian_data(connectivity, nodes, gauss_data, 3)
+
+            # Assemble global system
+            K, F = assemble_global_matrix(
+                connectivity, nodes, :Hex8, 2, mat, 3, nothing,
+                (gauss_data=gauss_data, jacobian_cache=jac_data, B_dicts=B_dicts);
+                NodalForces=Dict(:top => (fᵥ=nothing, fₜ=[0, 0, -1000])),
+                PointForces=Dict(123 => [0, 0, -500])
+            )
+
+
+            References
+            Zienkiewicz, O.C. & Taylor, R.L. (2005). "The Finite Element Method"
+        """
         function assemble_global_matrix(
             connectivity::Matrix{Int},
             nodes::Union{Matrix{Float64}, Vector{Float64}},

@@ -1,7 +1,28 @@
 # =============================================
 # Data Structures
 # =============================================
+    """
+        BoundaryCondition
 
+        Standard boundary condition for finite element analysis.
+
+        # Fields
+        - "type::Symbol": :dirichlet, :neumann, or :periodic
+        - "nodes_dof::Union{Vector{Int}, Tuple{Vector{Int}, Vector{Int}}}":
+        - For Dirichlet/Neumann: Node IDs
+        - For Periodic: (master_nodes, slave_nodes)
+        - "dof_mask::Union{Vector{Bool}, Nothing}": Boolean mask for constrained DOFs
+        - "macro_matrix::Union{Vector{Float64}, Nothing}": Prescribed values
+        - "dofs_per_node::Int": Degrees of freedom per node
+
+        # Examples
+        ```julia
+        # Fix x-direction for nodes 1-5
+        bc = BoundaryCondition(:dirichlet, 1:5, [true, false], [0.0], 2)
+
+        # Periodic constraints between left and right faces
+        bc = BoundaryCondition(:periodic, (left_nodes, right_nodes), nothing, nothing, 3)
+    """
     struct BoundaryCondition
         type::Symbol           # :dirichlet, :neumann, :periodic
         nodes_dof::Union{Vector{Int}, Tuple{Vector{Int}, Vector{Int}}}
@@ -17,7 +38,35 @@
         println(io, "  dof_mask = ", bc.dof_mask === nothing ? "nothing" : bc.dof_mask)
         println(io, "  macro_matrix = ", bc.macro_matrix === nothing ? "nothing" : bc.macro_matrix, ")")
     end
+    """
+        HomogenizationBC
 
+        Specialized boundary condition for computational homogenization.
+
+        # Fields
+        - "type::Symbol": :dirichlet, :neumann, or :periodic
+        - "macro_matrix": Macroscopic strain/stress tensor
+        - "node_pairs::Union{Tuple{Vector{Int}, Vector{Int}}, Nothing}": (master_nodes, slave_nodes)
+        - "nodes_dof::Union{Vector{Int}, Nothing}": Optional direct DOF specification
+        - "dof_mask::Union{Vector{Bool}, Nothing}": Boolean mask for constrained DOFs
+        - "coords::Matrix{Float64}": Nodal coordinates (N×dim matrix)
+        - "dofs_per_node::Int": Degrees of freedom per node
+
+        # Notes
+        - "macro_matrix" interpretation:
+        - Dirichlet: Strain tensor (voigt or matrix form)
+        - Neumann: Stress tensor
+        - "node_pairs" should be matched using "match_opposite_periodic_nodes"
+        - "coords" used to compute position-dependent constraints
+
+        # Examples
+        ```julia
+        # 2% strain in xx-direction
+        bc = HomogenizationBC(:dirichlet, [0.02 0; 0 0], nothing, [true, false], nodes, 2)
+
+        # Periodic BC with 500 node pairs
+        bc = HomogenizationBC(:periodic, G_macro, node_pairs, nothing, trues(3), nodes, 3)
+    """
     struct HomogenizationBC
         type::Symbol                    # :dirichlet, :neumann, :periodic
         macro_matrix::Union{Matrix{Float64}, Vector{Float64}, Nothing} # Macro-scale matrix (Gmacro or Emacro)
@@ -348,7 +397,30 @@
 
         return K_aug, F_aug, U_aug
     end
+    
+    """
+        match_opposite_periodic_nodes(coords, tol=1e-8)
 
+        Match nodes on opposite faces for periodic boundary conditions.
+
+        # Arguments
+        - "coords": N×dim matrix of nodal coordinates
+        - "tol": Geometric tolerance for matching
+
+        # Returns
+        Vector of (master, slave) node pairs
+
+        # Algorithm
+        1. For each dimension:
+        - Find nodes on min/max faces
+        - Match nodes by closest distance in perpendicular directions
+        2. Returns all matched pairs
+
+        # Notes
+        - Essential for homogenization with periodic BCs
+        - Handles 2D and 3D geometries
+        - Ensures compatible mesh for periodic constraints
+    """
     function match_opposite_periodic_nodes(coords::Matrix{Float64}, tol::Float64=1e-8)
         dim = size(coords, 2)
         pairs = Tuple{Int, Int}[]

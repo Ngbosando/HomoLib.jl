@@ -1,5 +1,4 @@
-function sort_periodic_nodes(slave_phys_tag::Int32, master_phys_tag::Int32, dim::Int64; coord_axis=:y)
-    """
+ """
     Sort nodes on periodic boundaries (slave and master) based on spatial coordinates.
     Returns `(slave_nodes_sorted, master_nodes_sorted)`.
 
@@ -9,6 +8,9 @@ function sort_periodic_nodes(slave_phys_tag::Int32, master_phys_tag::Int32, dim:
         dim: Dimension of the entities (1 for edges, 2 for surfaces).
         coord_axis: Axis to sort by (`:y` for vertical edges, `:x` for horizontal edges).
     """
+
+function sort_periodic_nodes(slave_phys_tag::Int32, master_phys_tag::Int32, dim::Int64; coord_axis=:y)
+   
     # Get all nodes on slave and master boundaries
     slave_nodes = gmsh.model.mesh.getNodesForPhysicalGroup(dim, slave_phys_tag)[1]
     master_nodes = gmsh.model.mesh.getNodesForPhysicalGroup(dim, master_phys_tag)[1]

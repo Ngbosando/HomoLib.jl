@@ -2,6 +2,44 @@ include("compute_flux.jl")
 #-----------------------------------------------------------------
 # Main Function
 #-----------------------------------------------------------------
+
+    """
+        compute_effective_property(materials, elements, nodes, connect_elem_phase,
+                                solver_results, element_type, integration_order,
+                                dim, Geometric_Data)
+
+        Compute volume-averaged effective properties from FEM solution.
+
+        # Arguments
+        - "materials": Single material or vector of materials for composites
+        - "elements": Element connectivity matrix (n_elem × nodes_per_elem)
+        - "nodes": Node coordinates (n_nodes × dim)
+        - "connect_elem_phase": Vector assigning material phase to each element
+        - "solver_results": Dictionary or NamedTuple of solution fields
+        - "element_type": Element type symbol (e.g., :Hex8)
+        - "integration_order": Numerical integration order
+        - "dim": Spatial dimension (2 or 3)
+        - "Geometric_Data": Precomputed geometric data (gauss_data, jacobian_cache, B_dicts)
+
+        # Returns
+        Tuple:
+        1. NamedTuple of effective properties (varies by material physics)
+        2. Total volume of the domain
+
+        # Algorithm
+        1. Validate material consistency for composites
+        2. Initialize storage for global averages
+        3. Thread-parallel element processing:
+        - Retrieve element solution
+        - Compute element contributions
+        - Accumulate volume-averaged quantities
+        4. Final volume averaging
+
+        # Notes
+        - For composites, "connect_elem_phase" must map each element to a material index
+        - Solution fields must match material physics requirements
+        - Properly handles generalized plane strain (out-of-plane symmetry)
+    """
     function compute_effective_property(
         materials::Union{Material, Vector{Material}},
         elements::Matrix{Int},
@@ -181,6 +219,23 @@ include("compute_flux.jl")
 #-----------------------------------------------------------------
 # Result Handling Utilities
 #-----------------------------------------------------------------
+    """
+        init_global_storage(materials, dim)
+
+        Initialize storage for global effective properties.
+
+        # Arguments
+        - "materials": Material definition(s)
+        - "dim": Spatial dimension
+
+        # Returns
+        NamedTuple with zero-initialized tensors appropriate for material physics
+
+        # Examples
+        - Thermal: (K = zeros(dim, dim),)
+        - Elastic: (C = zeros(nstr, nstr),)
+        - Piezoelectric: (C = ..., e = ..., ϵ = ...)
+    """
     function init_global_storage(materials::Union{Material,Vector{Material}}, dim::Int)
         mat = materials isa Vector ? materials[1] : materials
         
@@ -248,6 +303,31 @@ include("compute_flux.jl")
 #-----------------------------------------------------------------
 # Material Property Calculations
 #-----------------------------------------------------------------
+    """
+        compute_element_contribution(physics_type, mat, B_dict, elem_id, jacobian_data, gauss_data, Uᵉ)
+
+        Compute element-level contribution to effective properties.
+
+        # Arguments
+        - "physics_type": Val type identifying physics (:thermal, :elastic, etc.)
+        - "mat": Material definition
+        - "B_dict": B-matrices for the element
+        - "elem_id": Element ID
+        - "jacobian_data": Jacobian data at Gauss points
+        - "gauss_data": Shape function and weight data
+        - "Uᵉ": Element solution vector/matrix
+
+        # Returns
+        NamedTuple with:
+        - Property contributions (field names vary by physics)
+        - Element volume
+
+        # Implementation
+        - For thermal: Integrates heat flux q = -κ∇T
+        - For elastic: Integrates stress σ = Cε
+        - For piezoelectric: Integrates stress σ and electric displacement D
+        - For poroelastic: Integrates stress σ and Biot coupling
+    """
     function compute_element_contribution(::Val{:thermal}, mat::Material, B_dict, elem_id, jacobian_data, gauss_data, Uᵉ)
         κ = mat.tensors[1]
         B = B_dict[:temperature_gradient]

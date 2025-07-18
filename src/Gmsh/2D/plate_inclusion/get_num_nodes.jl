@@ -1,3 +1,22 @@
+"""
+    get_num_nodes(element_type::Symbol, element_order::Int) -> Int
+
+    Return the number of nodes for a given element type and order.
+
+    # Arguments
+    - "element_type": Element type as a symbol. Supported types are:
+    - ":lin" (1D line elements)
+    - ":triangle" (2D triangular elements)
+    - ":quadrilateral" (2D quadrilateral elements) 
+    - ":tetrahedron" (3D tetrahedral elements)
+    - ":hexahedron" (3D hexahedral elements)
+    - ":prism" (3D prismatic elements)
+    - ":pyramid" (3D pyramidal elements)
+    - "element_order": Polynomial order of the element (1 to 5)
+
+    # Returns
+    Number of nodes for the specified element type and order.
+"""
 function get_num_nodes(element_type::Symbol, element_order::Int)
     node_table = Dict(
         :lin => [2, 3, 4, 5, 6],

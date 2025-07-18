@@ -1,3 +1,22 @@
+"""
+    reshape_elements(elements, element_type, element_order)
+
+    Reshape element connectivity array into proper matrix format.
+
+    # Arguments
+    - "elements": Flat array of node connectivity
+    - "element_type": Element type symbol (e.g., :Tri3, :Quad4)
+    - "element_order": Polynomial order of elements
+
+    # Returns
+    Matrix with shape (n_elements, nodes_per_element)
+
+    # Notes
+    - Validates element family and order
+    - Checks for proper array length
+    - Uses element configuration dictionary
+"""
+
 function reshape_elements(elements, element_type, element_order)
     family = get_element_family(element_type)
     n_nodes = get_node_count(family, element_order)

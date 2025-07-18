@@ -1,4 +1,26 @@
 include("cube.jl")
+
+"""
+    build_reference_tetrahedron(order::Int, element_type; show_gui=false)
+
+    Generate a reference tetrahedron mesh for finite element analysis.
+
+    # Arguments
+    - "order": Polynomial order of the elements
+    - "element_type": Symbol specifying element type (e.g., :Tet4, :Tet10)
+    - "show_gui": Whether to display the GMSH GUI (default: false)
+
+    # Returns
+    - "nodes": Node coordinates (N×3 matrix)
+    - "connectivity1": First connectivity array
+    - "connectivity2": Second connectivity array
+
+    # Notes
+    - Creates a reference tetrahedron with vertices at (0,0,0), (1,0,0), (0,1,0), (0,0,1)
+    - Includes additional mesh information and properties
+    - Can compute basis functions and Jacobians at integration points
+"""
+
 function build_reference_tetrahedron(order::Int,element_type); show_gui=false
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 0)

@@ -1,3 +1,36 @@
+"""
+    cube(filename, ndiv, b, h, l, element_order, element_type; show_gui=false)
+
+    Generate a 3D hexahedral mesh of a cube.
+
+    # Arguments
+    - "filename": Output filename for the mesh
+    - "ndiv": Number of divisions along each edge
+    - "b": Dimension in x-direction
+    - "h": Dimension in y-direction
+    - "l": Dimension in z-direction
+    - "element_order": Polynomial order of elements
+    - "element_type": Element type symbol (e.g., :Hex8, :Hex27)
+    - "show_gui": Whether to display the GMSH GUI (default: false)
+
+    # Returns
+    Tuple containing:
+    - "nodes": Node coordinates (N×3 matrix)
+    - "connectivity": Element connectivity matrix
+    - "ind_B": Bottom face node indices
+    - "ind_Ba": Back face node indices
+    - "ind_F": Front face node indices
+    - "ind_L": Left face node indices
+    - "ind_T": Top face node indices
+    - "ind_R": Right face node indices
+
+    # Notes
+    - Creates a structured hexahedral mesh with transfinite interpolation
+    - Physical groups are created for all six faces
+    - Supports both hexahedral and tetrahedral elements
+    - Nodes are reordered to match tensor product ordering
+"""
+
 function cube(filename, ndiv,b,h,l,element_order,element_type; show_gui=false)
     gmsh.initialize()
     gmsh.model.add("cube")

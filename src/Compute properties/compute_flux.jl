@@ -1,6 +1,63 @@
 #-----------------------------------------------------------------
 # Main Field Recovery Function
 #-----------------------------------------------------------------
+    """
+        HomoLib.recover_field_values
+
+        Module for post-processing and field recovery from finite element solutions,
+        implementing consistent field averaging techniques for accurate visualization
+        and analysis of heterogeneous materials.
+
+        # Key Features
+        - Implements the Consistent Field Averaging (CFA) method for:
+        - Stress/strain recovery (Zienkiewicz-Zhu estimator)
+        - Flux/gradient recovery
+        - Multi-physics field coupling
+        - Supports both nodal and Gauss point field evaluation
+        - Handles composite materials with phase-wise properties
+        - Thread-parallel implementation for large-scale problems
+
+        # Field Recovery Methods
+        1. **Superconvergent Patch Recovery (SPR)**:
+        - Least-squares fitting of stresses at superconvergent points
+        - Optimal for quadratic elements (Zienkiewicz & Zhu, 1992)
+
+        2. **Weighted Averaging**:
+        - Volume-weighted averaging of element contributions
+        - Preserves equilibrium in an integral sense
+
+        3. **Material-Specific Recovery**:
+        - Specialized handling for:
+            - Piezoelectric (electric displacement field)
+            - Poroelastic (pore pressure field)
+            - Viscoelastic (rate-dependent fields)
+
+        # Usage Example
+        ```julia
+        # Recover thermal fields
+        fields = recover_field_values(
+            elements, nodes, material, solution,
+            nothing, :Tri6, 3, 2, geom_data
+        )
+
+        # Access recovered fields:
+        heat_flux = fields.flux  # [num_nodes × dim]
+        temp_grad = fields.grad_temp  # [num_nodes × dim]
+
+        # Recover elastic fields
+        fields = recover_field_values(...)
+        stress = fields.stress  # [num_nodes × n_components]
+        strain = fields.strain  # [num_nodes × n_components]
+        Implementation Details
+
+        Nodal Averaging:
+        σᵢ = ∑ₑ∈Ωᵢ (σₑ ⋅ Vₑ) ÷ ∑ₑ∈Ωᵢ Vₑ
+
+
+        References
+        Zienkiewicz, O.C. & Taylor, R.L. (2005). "The Finite Element Method"
+
+    """
     function recover_field_values(
         elements::Matrix{Int},
         nodes::Union{Matrix{Float64}, Vector{Float64}},
@@ -104,7 +161,7 @@
 # Field Storage Initialization
 #-----------------------------------------------------------------
  
-   function init_field_storage(mat::Material, dim::Int, num_nodes::Int)
+    function init_field_storage(mat::Material, dim::Int, num_nodes::Int)
        
         if mat.type == [:thermal]
             (flux = zeros(num_nodes, dim), grad_temp = zeros(num_nodes, dim)) 

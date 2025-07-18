@@ -1,3 +1,26 @@
+"""
+    create_elliptical_inclusion(x, y, a, b, θ, voids)
+
+    Create an elliptical inclusion in GMSH.
+
+    # Arguments
+    - "x": x-coordinate of center
+    - "y": y-coordinate of center
+    - "a": Semi-major axis length
+    - "b": Semi-minor axis length
+    - "θ": Rotation angle in radians
+    - "voids": Whether to create void (true) or material (false)
+
+    # Returns
+    Tuple containing:
+    - "loop": Curve loop tag
+    - "surface": Surface tag (nothing if voids=true)
+    - "boundary": List of elliptical arc tags
+
+    # Notes
+    - Creates ellipse using four elliptical arcs
+    - Applies rotation after creation
+"""
 
 function create_elliptical_inclusion(
     x, y, a, b, θ, voids

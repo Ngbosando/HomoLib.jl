@@ -1,4 +1,17 @@
+"""
+    assign_physical_groups()
 
+    Assign physical groups to elements in GMSH model.
+
+    # Returns
+    Tuple containing:
+    - "ConnectElemPhase": Physical tag for each element
+    - "PhysicalGroups": List of all physical groups
+
+    # Notes
+    - Queries GMSH for physical group assignments
+    - Returns sorted element-phase pairs
+"""
 
 function assign_physical_groups()
     PhysicalGroups = gmsh.model.getPhysicalGroups(2)

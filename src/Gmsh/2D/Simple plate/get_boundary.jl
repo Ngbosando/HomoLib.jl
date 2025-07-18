@@ -1,3 +1,24 @@
+"""
+    getBoundaryNodes(nodeCoordinates, L)
+
+    Identify boundary nodes of a square domain.
+
+    # Arguments
+    - "nodeCoordinates": N×2 matrix of node coordinates
+    - "L": Length of the square domain
+
+    # Returns
+    Tuple containing four arrays:
+    - "leftBoundaryNodes": Nodes on x=0 boundary
+    - "rightBoundaryNodes": Nodes on x=L boundary
+    - "topBoundaryNodes": Nodes on y=L boundary
+    - "bottomBoundaryNodes": Nodes on y=0 boundary
+
+    # Notes
+    - Uses a tolerance of 1e-12 to identify boundary nodes
+    - Works for both structured and unstructured meshes
+"""
+
 function getBoundaryNodes(nodeCoordinates, L)
     # Initialisation des vecteurs pour stocker les indices des nœuds sur les frontières
     leftBoundaryNodes = Int[]  # Nœuds sur la frontière gauche (x ≈ 0)

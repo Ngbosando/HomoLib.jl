@@ -1,3 +1,25 @@
+"""
+    create_square_inclusion(x, y, size1, size2, θ, voids)
+
+    Create a rotated square inclusion in GMSH.
+
+    # Arguments
+    - "x": x-coordinate of center
+    - "y": y-coordinate of center
+    - "size1": Length of side 1
+    - "size2": Length of side 2
+    - "θ": Rotation angle in radians
+    - "voids": Whether to create void (true) or material (false)
+
+    # Returns
+    Tuple containing:
+    - "loop": Curve loop tag
+    - "surface": Surface tag (nothing if voids=true)
+    - "boundary": List of line tags
+
+    # Notes
+    - Creates square centered at (x,y) and applies rotation
+"""
 
 function create_square_inclusion(x, y, size1, size2, θ,voids)
    

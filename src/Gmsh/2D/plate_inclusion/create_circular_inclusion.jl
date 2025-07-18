@@ -1,3 +1,24 @@
+"""
+    create_circular_inclusion(x, y, radius, voids)
+
+    Create a circular inclusion in GMSH.
+
+    # Arguments
+    - "x": x-coordinate of center
+    - "y": y-coordinate of center
+    - "radius": Radius of circle
+    - "voids": Whether to create void (true) or material (false)
+
+    # Returns
+    Tuple containing:
+    - "loop": Curve loop tag
+    - "surface": Surface tag (nothing if voids=true)
+    - "boundary": List of circular arc tags
+
+    # Notes
+    - Creates circle using four circular arcs
+    - For voids, no surface is created
+"""
 
 function create_circular_inclusion(x, y, radius, voids)
 

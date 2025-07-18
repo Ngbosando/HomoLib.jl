@@ -1,10 +1,10 @@
 """
     visualize_periodic_pairs(coords, master_nodes, slave_nodes)
 
-Plots only the matched master-slave nodes and connecting lines.
-- Red: slave
-- Blue: master
-- Green: connection line
+    Plots only the matched master-slave nodes and connecting lines.
+    - Red: slave
+    - Blue: master
+    - Green: connection line
 """
 function visualize_periodic_pairs(
     coords::Matrix{Float64},

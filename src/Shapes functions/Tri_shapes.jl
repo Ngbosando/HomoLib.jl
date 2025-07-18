@@ -2,7 +2,6 @@
 # Triangular Element Structs
 # =============================================
 
-
 # =============================================
 # Shape Function Implementations
 # =============================================
@@ -95,7 +94,7 @@ end
 # =============================================
 
 function shape_functions(::Tri15, ξ::T, η::T) where T<:Real
-    z = ξ + η - 1
+    z = -ζ(ξ, η)
     N = Vector{T}(undef, 15)
     
     # Définition des fonctions de forme
@@ -212,47 +211,6 @@ end
     (0.4, 0.4)   # Node 21
 ]
 
-
-# function shape_functions(::Tri21, ξ::T, η::T) where T<:Real
-#     h = 1e-8
-#     function bary_poly(i, j, k, ξ, η)
-#         if i < 0 || j < 0 || k < 0
-#             return 0.0
-#         end
-#         L1 = 1.0 - ξ - η
-#         L2 = ξ
-#         L3 = η
-#         return factorial(5) / (factorial(i)*factorial(j)*factorial(k)) * (L1^i) * (L2^j) * (L3^k)
-#     end
-
-#     idxs = [
-#         (5, 0, 0), (4, 1, 0), (3, 2, 0), (2, 3, 0), (1, 4, 0), (0, 5, 0),
-#         (4, 0, 1), (3, 1, 1), (2, 2, 1), (1, 3, 1), (0, 4, 1),
-#         (3, 0, 2), (2, 1, 2), (1, 2, 2), (0, 3, 2),
-#         (2, 0, 3), (1, 1, 3), (0, 2, 3),
-#         (1, 0, 4), (0, 1, 4),
-#         (0, 0, 5)
-#     ]
-
-#     N = [bary_poly(i, j, k, ξ, η) for (i, j, k) in idxs]
-
-#     Nξ_plus = [bary_poly(i, j, k, ξ+h, η) for (i, j, k) in idxs]
-#     Nξ_minus = [bary_poly(i, j, k, ξ-h, η) for (i, j, k) in idxs]
-#     dN_dξ = [(Nξ_plus[i] - Nξ_minus[i]) / (2h) for i in 1:21]
-
-#     Nη_plus = [bary_poly(i, j, k, ξ, η+h) for (i, j, k) in idxs]
-#     Nη_minus = [bary_poly(i, j, k, ξ, η-h) for (i, j, k) in idxs]
-#     dN_dη = [(Nη_plus[i] - Nη_minus[i]) / (2h) for i in 1:21]
-
-#     return N, dN_dξ, dN_dη
-# end
-
-# function shapeFunctions_Tri21_dual(ξ::Real, η::Real)
-#     input = [ξ, η]
-#     f(ξη) = shapeFunctions_Tri21(ξη[1], ξη[2])[1]  # only N, no grad
-#     val, grad = ForwardDiff.value.(f(input)), ForwardDiff.gradient(f, input)
-#     return val, grad[1:21:end], grad[2:21:end]  # reshape gradients per variable
-# end
 function shape_functions(::Tri21, ξ::T, η::T) where T<:Real
     h = 1e-8
     function bary_poly(i, j, k, ξ, η)

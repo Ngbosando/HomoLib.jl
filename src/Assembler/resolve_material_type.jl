@@ -1,10 +1,37 @@
-
 """
-    resolve_material_type(physics::Vector{Symbol}) -> Symbol
+    resolve_material_type(material)
 
-Resolves a composite material `physics` vector (e.g. `[:elastic, :thermal]`) 
-into a legacy type symbol used for dispatch.
+    Determine the physics type of a material based on its properties.
+
+    # Arguments
+    - "material": A "Material" instance or vector of "Material" instances (for composites)
+
+    # Returns
+    Symbol representing the resolved material physics type:
+    - ":elastic": Pure elasticity
+    - ":piezoelectric": Coupled elastic-electric behavior
+    - ":thermal": Thermal conduction
+    - ":thermoelastic": Coupled thermal-elastic behavior
+    - ":poroelastic": Poroelasticity (Biot model)
+    - ":stokes": Stokes flow (fluid mechanics)
+
+    # Material Type Resolution Logic
+    1. "Pure Elastic": 
+    - Physics = [:elastic]
+    - No Biot coefficient (:α_p) present
+    2. "Piezoelectric":
+    - Physics = [:elastic, :electric]
+    3. "Thermal":
+    - Physics = [:thermal]
+    4. "Thermoelastic":
+    - Physics = [:elastic, :thermal]
+    5. "Poroelastic":
+    - Physics includes [:elastic, :pressure] OR 
+    - Material has Biot coefficient (:α_p)
+    6. "Stokes Flow":
+    - Physics = [:fluid, :pressure]
 """
+
 function resolve_material_type(materials::Union{Material,Vector{Material}})
  
     physics = materials.type

@@ -12,7 +12,7 @@ Filter and sort nodes based on their node_tags and elementsivity.
 # Returns
 - `Array{Float64, 2}`: Sorted array of nodes with their coordinates.
 """
-function filter_and_sort_nodes(node_tag, nodes_x, nodes_y, elements, nodes_per_element)
+function filter_and_sort_nodes(node_tag, nodes_x, nodes_y, elements)
     u_node_tag = unique(vec(elements))  
     node_tag = convert.(Int64, node_tag)
     node_tag = hcat(node_tag, nodes_x, nodes_y)

@@ -1,12 +1,12 @@
-        """
+"""
     build_periodic_node_pairs(coords::Matrix{Float64}; tol=1e-8)
 
-Automatically identifies periodic master-slave node pairs along each spatial
-direction by matching nodes on opposite sides of the domain.
+    Automatically identifies periodic master-slave node pairs along each spatial
+    direction by matching nodes on opposite sides of the domain.
 
-Returns:
-- master_nodes::Vector{Int}
-- slave_nodes::Vector{Int}
+    Returns:
+    - master_nodes::Vector{Int}
+    - slave_nodes::Vector{Int}
 """
 function build_periodic_node_pairs(coords::Matrix{Float64}; tol=1e-8)
     dim = size(coords, 2)

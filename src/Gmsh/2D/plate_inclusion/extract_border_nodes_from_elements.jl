@@ -1,3 +1,24 @@
+"""
+    extract_border_nodes_from_elements(dim::Int; tol=1e-6, box_size=(1.0,1.0,1.0), inclusion_borders)
+
+    Extract border nodes from mesh elements.
+
+    # Arguments
+    - "dim": Dimension of elements (2 for 2D)
+
+    # Keyword Arguments
+    - "tol": Tolerance for boundary detection
+    - "box_size": Domain dimensions (Lx, Ly, Lz)
+    - "inclusion_borders": List of inclusion boundary curves
+
+    # Returns
+    Dictionary mapping boundary names to element connectivity matrices
+
+    # Notes
+    - Identifies elements on plate boundaries by centroid position
+    - Handles inclusion boundaries separately
+    - Returns dictionary with :left, :right, :bottom, :top and inclusion boundaries
+"""
 function extract_border_nodes_from_elements(dim::Int; tol=1e-6, box_size=(1.0,1.0,1.0), inclusion_borders)
     # Prepare dict: side name => Vector of element connectivity vectors
     sides = Dict{Symbol, Matrix{Int}}()

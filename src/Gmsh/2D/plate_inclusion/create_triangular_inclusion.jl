@@ -1,4 +1,24 @@
+"""
+    create_triangular_inclusion(x, y, side_length, θ, voids)
 
+    Create an equilateral triangular inclusion in GMSH.
+
+    # Arguments
+    - "x": x-coordinate of center
+    - "y": y-coordinate of center
+    - "side_length": Length of triangle sides
+    - "θ": Rotation angle in radians
+    - "voids": Whether to create void (true) or material (false)
+
+    # Returns
+    Tuple containing:
+    - "loop": Curve loop tag
+    - "surface": Surface tag (nothing if voids=true)
+    - "boundary": List of line tags
+
+    # Notes
+    - Creates equilateral triangle centered at (x,y) and applies rotation
+"""
 
 function create_triangular_inclusion(x, y, side_length, θ, voids)
     height = sqrt(3) / 2 * side_length  # Calculate the height of the equilateral triangle

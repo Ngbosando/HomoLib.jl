@@ -6,7 +6,79 @@ include("Tri_shapes.jl")
 include("Lin_shapes.jl")
 include("Tet_shapes.jl")
 
+"""
+    HomoLib.ShapeFunctions
 
+    Module providing shape functions and their derivatives for various finite element types,
+    implementing standard and hierarchical basis functions for accurate finite element analysis.
+
+    # Supported Element Families
+    - "Triangular Elements":
+    - Linear (Tri3), Quadratic (Tri6), Cubic (Tri10) 
+    - Quartic (Tri15), Quintic (Tri21)
+    - "Quadrilateral Elements":
+    - Bilinear (Quad4), Serendipity (Quad8/Quad9)
+    - Lagrangian (Quad16, Quad25, Quad36)
+    - "Hexahedral Elements":
+    - Trilinear (Hex8), Quadratic (Hex27)
+    - Cubic (Hex64), Quartic (Hex125), Quintic (Hex216)
+    - "Tetrahedral Elements":
+    - Linear (Tet4), Quadratic (Tet10)
+    - Cubic (Tet20), Quartic (Tet35), Quintic (Tet56)
+    - "Pyramid Elements":
+    - Linear (Pyr5), Quadratic (Pyr14)
+    - Cubic (Pyr29), Quartic (Pyr50), Quintic (Pyr77)
+    - "Prismatic Elements":
+    - Linear (Pri6), Quadratic (Pri18)
+    - Cubic (Pri36), Quartic (Pri56), Quintic (Pri78)
+    - "Line Elements":
+    - 1-6 node versions (Lin1-Lin6)
+
+    # Provided Quantities
+    For each element type:
+    - Shape functions N(ξ,η,ζ)
+    - Derivatives ∂N/∂ξ, ∂N/∂η, ∂N/∂ζ
+    - Consistent node ordering conventions
+    - Support for isoparametric mapping
+
+    # Usage
+    ```julia
+    # Get shape functions for quadratic triangle at point (0.2, 0.3)
+    N, dNξ, dNη = shape_functions(:Tri6, 0.2, 0.3)
+
+    # Get shape functions for trilinear hex at point (0.1, 0.2, 0.3)
+    N, dNξ, dNη, dNζ = shape_functions(:Hex8, 0.1, 0.2, 0.3)
+    Key Features
+    Consistent Evaluation: Returns (N, dNξ, dNη[, dNζ]) tuple for all elements
+
+    Optimal Basis Functions:
+
+    Lagrangian polynomials for tensor-product elements
+
+    Hierarchical bases for simplex elements
+
+    Reference Coordinates:
+
+    Triangles: Area coordinates (ξ,η)
+
+    Quads/Hexes: Natural coordinates [-1,1]^d
+
+    Tets: Volume coordinates (ξ,η,ζ)
+
+    Efficient Computation: Closed-form expressions used where available
+
+    Theory
+    Shape functions satisfy:
+
+    Partition of unity: ∑Nᵢ = 1
+
+    Kronecker delta property: Nᵢ(ξⱼ) = δᵢⱼ
+
+    Polynomial completeness: Can represent all polynomials up to element order
+
+    References
+    Zienkiewicz, O.C. & Taylor, R.L. (2005). "The Finite Element Method"
+"""
 function shape_functions(element_type::Symbol, args...)
     if element_type == :Tri3
         shape_functions(Tri3(), args...)

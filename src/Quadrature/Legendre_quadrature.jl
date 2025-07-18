@@ -2,6 +2,7 @@
 # =============================================
 # Line integration rule
 # =============================================
+
 function integration_rule(element::LinearElement, order::Int) 
     ξ, w = gausslegendre(order)
     return ξ, w  # 1D points stored as column vector

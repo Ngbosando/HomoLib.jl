@@ -1,3 +1,44 @@
+"""
+    theorical_bound(field_type, bound_type, args...)
+
+Compute theoretical bounds for effective material properties of composite materials.
+
+# Arguments
+- {field_type::Symbol}: Type of physical field (`:elastic` or `:thermal`)
+- {bound_type::Symbol}: Type of bound to compute:
+  - For elastic: {:voigt}, {:reuss}, {:hashin_shtrikman}
+  - For thermal: {:voigt}, {:reuss}, {:hashin_shtrikman}, {:maxwell}
+- {args...}: Material properties and volume fraction:
+  - Elastic: {(κ1, μ1, κ2, μ2, f)}
+  - Thermal: {(k1, k2, f)}
+
+# Returns
+- For elastic field:
+  - {:voigt}/{:reuss}: Named tuple (κ=..., μ=...)
+  - {:hashin_shtrikman}: Named tuple (κ_lower=..., κ_upper=..., μ_lower=..., μ_upper=...)
+- For thermal field:
+  - {:voigt}/{:reuss}: Named tuple (k=...)
+  - {:hashin_shtrikman}/{:maxwell}: Named tuple (k_lower=..., k_upper=...)
+
+# Theory
+    Computes various bounds for effective properties of two-phase composites:
+    - "Voigt bound": Arithmetic mean (upper bound for stiffness)
+    - "Reuss bound": Harmonic mean (lower bound for stiffness)
+    - "Hashin-Shtrikman": Tighter bounds for isotropic composites
+    - "Maxwell's approximation": Effective conductivity for dilute suspensions
+
+    # Examples
+    ```julia
+    # Elastic bounds
+    elastic_voigt = theorical_bound(:elastic, :voigt, 3.0, 1.5, 10.0, 5.0, 0.3)
+    hs_bounds = theorical_bound(:elastic, :hashin_shtrikman, 3.0, 1.5, 10.0, 5.0, 0.3)
+
+    # Thermal bounds
+    thermal_reuss = theorical_bound(:thermal, :reuss, 0.5, 5.0, 0.2)
+    maxwell_bounds = theorical_bound(:thermal, :maxwell, 0.5, 5.0, 0.3)
+
+"""
+
 function theorical_bound(field_type::Symbol, bound_type::Symbol, args...)
     # ========== Input Validation ========== #
     !(field_type in [:elastic, :thermal]) && 

@@ -1,3 +1,21 @@
+"""
+    create_plate(plate_width, plate_height)
+
+    Create a rectangular plate geometry in GMSH.
+
+    # Arguments
+    - "plate_width": Width of the plate (x-direction)
+    - "plate_height": Height of the plate (y-direction)
+
+    # Returns
+    Tuple containing:
+    - "plate_loop": Curve loop tag of the plate boundary
+    - "plate_lines": List of line tags for plate edges
+
+    # Notes
+    - Creates a rectangle with corners at (0,0) to (width,height)
+    - Returns geometry tags for further operations
+"""
 
 function create_plate(
     plate_width, 

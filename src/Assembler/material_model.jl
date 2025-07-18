@@ -58,6 +58,61 @@ const CONJUGATE_FIELDS = Dict(
 # ----------------------
 # Main Material Definition
 # ----------------------
+"""
+    HomoLib.Material
+
+    Core material definition system for multiphysics simulations.
+
+    # Main Components
+    1. "Material Definition": Create materials with "material_def" function
+    2. "Tensor Generation": Automatic generation of property tensors based on symmetry
+    3. "Physics Coupling": Support for coupled physics (thermoelastic, piezoelectric, etc.)
+    4. "Display System": Pretty-printing of material properties
+
+    # Key Features
+    - Supports multiple physics: elastic, thermal, electric, fluid, and their couplings
+    - Handles various material symmetries: isotropic, orthotropic, anisotropic, etc.
+    - Automatic tensor generation with validation
+    - Comprehensive property management
+
+    # Material Symmetries
+    - {:isotropic}: Same properties in all directions
+    - {:orthotropic}: Three orthogonal planes of symmetry
+    - {:anisotropic}: No symmetry (requires full tensor input)
+    - {:transversely_isotropic}: Axisymmetric about one direction
+    - {:out_of_plane}: Special 2D case with out-of-plane components
+
+    # Physics Types
+    - {:elastic}: Mechanical properties (E, ν, G)
+    - {:thermal}: Thermal conductivity
+    - {:electric}: Electrical permittivity
+    - {:fluid}: Fluid viscosity
+    - {:pressure}: Poroelastic effects
+
+    # Usage Examples
+    ```julia
+    # Isotropic elastic material
+    mat1 = material_def([:elastic], 3, :isotropic, E=210e9, ν=0.3)
+
+    # Orthotropic thermal material
+    mat2 = material_def([:thermal], 2, :orthotropic, κ=[1.2, 0.8])
+
+    # Piezoelectric material
+    mat3 = material_def([:elastic, :electric], 3, :orthotropic, 
+                        E1=70e9, E2=60e9, E3=50e9, ν12=0.3, ν13=0.25, ν23=0.2,
+                        G12=25e9, G13=20e9, G23=18e9, ϵ=diagm([12, 12, 10]), 
+                        e=[0 0 0 0 12 0; 0 0 0 12 0 0; -4 -4 14 0 0 0])
+
+    # Thermoelastic material with mass properties
+    mat4 = material_def([:elastic, :thermal], 3, :isotropic,
+                        E=200e9, ν=0.3, α=12e-6, κ=45.0,
+                        mass_properties=Dict(:ρ=>7850, :c_p=>500))
+                        
+    The function automatically generates appropriate tensors based on parameters
+    For anisotropic materials, full tensors must be provided
+
+    For out-of-plane 2D, special tensors include out-of-plane components
+"""
 function material_def(physics::Vector{Symbol}, dim::Int, symmetry::Symbol; 
                      mass_properties=nothing, kwargs...)
     dim ∈ (1, 2, 3) || error("Invalid dimension: $dim")

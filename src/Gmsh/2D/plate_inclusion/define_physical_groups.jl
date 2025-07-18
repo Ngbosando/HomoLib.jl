@@ -1,3 +1,27 @@
+"""
+    define_physical_groups(
+        plate_lines, plate_surface, inclusion_surfaces, inclusion_borders, num_inclusions
+    )
+
+    Define physical groups in GMSH model.
+
+    # Arguments
+    - "plate_lines": List of plate boundary line tags
+    - "plate_surface": Plate surface tag
+    - "inclusion_surfaces": List of inclusion surface tags
+    - "inclusion_borders": List of inclusion boundary curves
+    - "num_inclusions": Number of inclusions
+
+    # Returns
+    Tuple containing:
+    - Physical group tags for plate boundaries (B_B, B_D, B_H, B_G)
+    - List of inclusion frontier tags
+
+    # Notes
+    - Creates physical groups for boundaries and domains
+    - Assigns meaningful names to groups
+    - Returns tags for later node extraction
+"""
 
 function define_physical_groups(
     plate_lines, plate_surface, inclusion_surfaces, inclusion_borders, num_inclusions

@@ -5,6 +5,29 @@
 # ----------------------
 # Jacobian Computation
 # ----------------------
+    """
+        compute_jacobian(elem_conn, nodes, shp, dim::Int; elem_dim)
+
+        Compute Jacobian matrices and related geometric quantities for finite element analysis.
+
+        # Arguments
+        - "elem_conn": Element connectivity (indices of nodes)
+        - "nodes": Node coordinates matrix (N×dim)
+        - "shp": Shape function data structure
+        - "dim": Physical dimension (1, 2, or 3)
+        - "elem_dim": Parametric dimension of element
+
+        # Returns
+        Vector of tuples containing for each Gauss point:
+        1. Absolute determinant of Jacobian
+        2. Inverse of Jacobian matrix
+        3. Jacobian matrix itself
+
+        # Notes
+        - Automatically corrects element orientation
+        - Handles non-square Jacobians for shells/beams
+        - Throws error for nearly singular Jacobians
+    """
     function compute_jacobian(elem_conn, nodes, shp, dim::Int; elem_dim)
         n_nodes = length(elem_conn)
         ngp = length(shp.weights)
@@ -119,6 +142,28 @@
 # ----------------------
 # Shape Data Precomputation
 # ----------------------
+    """
+        shape_data(element_type, int_order, dim)
+
+        Precompute shape functions and derivatives at Gauss points.
+
+        # Arguments
+        - "element_type": Element type (e.g., Tri6, Quad8)
+        - "int_order": Integration order
+        - "dim": Physical dimension
+
+        # Returns
+        Named tuple containing:
+        - "N": Shape functions at Gauss points
+        - "shape_ξ": ξ-derivatives
+        - "shape_η": η-derivatives (2D/3D)
+        - "shape_ζ": ζ-derivatives (3D)
+        - "weights": Integration weights
+
+        # Notes
+        - Automatically selects appropriate Gauss quadrature
+        - Returns nothing for unused derivatives
+    """
     function shape_data(element_type, int_order, dim)
         gauss_points, gauss_weights = integration_rule(element_type, int_order)
         shape_data = [(shape_functions(element_type, ξ...)..., w)
@@ -136,6 +181,25 @@
 # ----------------------
 # Jacobian Data Precomputation
 # ----------------------
+    """
+        jacobian_data(connectivity, nodes, shape_data, dim; elem_dim=dim)
+
+        Precompute Jacobian data for all elements.
+
+        # Arguments
+        - "connectivity": Matrix of element connectivities
+        - "nodes": Node coordinates
+        - "shape_data": Precomputed shape function data
+        - "dim": Physical dimension
+        - "elem_dim": Parametric dimension
+
+        # Returns
+        Vector of Jacobian data (one entry per element)
+
+        # Notes
+        - Wrapper around "compute_jacobian" for multiple elements
+        - Maintains consistent interface for all element types
+    """
     function jacobian_data(connectivity, nodes, shape_data, dim; elem_dim=dim)
         Ne = size(connectivity, 1)
         return [compute_jacobian(connectivity[i, :], nodes, shape_data,dim; elem_dim) for i in 1:Ne]
@@ -147,6 +211,24 @@
     # ----------------------
     # Strain B-Matrix
     # ----------------------
+        """
+            build_strain_B(elem_jac, gauss_data, dim, n_nodes)
+
+            Construct strain-displacement (B) matrices.
+
+            # Arguments
+            - "elem_jac": Precomputed Jacobian data
+            - "gauss_data": Shape function data
+            - "dim": Physical dimension
+            - "n_nodes": Number of nodes per element
+
+            # Returns
+            Vector of B-matrices (one per Gauss point)
+
+            # Notes
+            - Handles 1D, 2D, and 3D cases
+            - Returns properly ordered strain components
+        """
         function build_strain_B(elem_jac, gauss_data, dim, n_nodes)
             n_gauss = length(gauss_data.weights)
             strain_comp = dim == 1 ? 1 : dim == 2 ? 3 : 6
@@ -158,6 +240,25 @@
     # ----------------------
     # Gradient B-Matrix
     # ----------------------
+
+        """
+            build_gradient_B(elem_jac, gauss_data, dim, n_nodes)
+
+            Construct gradient operator matrices.
+
+            # Arguments
+            - "elem_jac": Precomputed Jacobian data
+            - "gauss_data": Shape function data
+            - "dim": Physical dimension
+            - "n_nodes": Number of nodes per element
+
+            # Returns
+            Vector of gradient matrices (one per Gauss point)
+
+            # Notes
+            - Used for scalar field gradients
+            - Consistent with strain B-matrix formulation
+        """
         function build_gradient_B(elem_jac, gauss_data, dim, n_nodes)
             n_gauss = length(gauss_data.weights)
             B = [zeros(dim, n_nodes) for _ in 1:n_gauss]
@@ -168,6 +269,22 @@
     # ----------------------
     # Strain B-Matrix Computation
     # ----------------------
+        """
+            fill_strain_B!(B, elem_jac, gauss_data, dim, n_nodes)
+
+            Fill preallocated strain B-matrices.
+
+            # Arguments
+            - "B": Preallocated matrix storage
+            - "elem_jac": Jacobian data
+            - "gauss_data": Shape function data
+            - "dim": Physical dimension
+            - "n_nodes": Nodes per element
+
+            # Notes
+            - In-place operation for performance
+            - Implements proper Voigt ordering
+        """
         function fill_strain_B!(B, elem_jac, gauss_data, dim, n_nodes)
             # Setup parametric derivative iterator
             iter = dim == 1 ? zip(gauss_data.shape_ξ) :
@@ -209,6 +326,23 @@
     # ----------------------
     # Gradient B-Matrix Computation
     # ----------------------
+
+        """
+            fill_gradient_B!(B, elem_jac, gauss_data, dim, n_nodes)
+
+            Fill preallocated gradient matrices.
+
+            # Arguments
+            - "B": Preallocated matrix storage
+            - "elem_jac": Jacobian data
+            - "gauss_data": Shape function data
+            - "dim": Physical dimension
+            - "n_nodes": Nodes per element
+
+            # Notes
+            - Optimized for scalar field problems
+            - Reuses Jacobian computations
+        """
         function fill_gradient_B!(B, elem_jac, gauss_data, dim, n_nodes)
             # Setup parametric derivative iterator
             iter = dim == 1 ? zip(gauss_data.shape_ξ) :
@@ -233,6 +367,29 @@
     # ----------------------
     # B-Matrix Assembly
     # ----------------------
+
+        """
+            build_B_matrices(nodes, connectivity, material, gauss_data, jacobian_data)
+
+            Assemble all required B-matrices for a material.
+
+            # Arguments
+            - "nodes": Node coordinates
+            - "connectivity": Element connectivity
+            - "material": Material definition
+            - "gauss_data": Shape function data
+            - "jacobian_data": Precomputed Jacobians
+
+            # Returns
+            Vector of dictionaries containing B-matrices:
+            - Keys: B-matrix types (:strain, :gradient, etc.)
+            - Values: Vectors of matrices (per Gauss point)
+
+            # Notes
+            - Thread-parallel implementation
+            - Handles multiple B-matrix types
+            - Supports out-of-plane symmetry
+        """
         function build_B_matrices(
             nodes::Union{Matrix{Float64}, Vector{Float64}},
             connectivity::Matrix{Int},

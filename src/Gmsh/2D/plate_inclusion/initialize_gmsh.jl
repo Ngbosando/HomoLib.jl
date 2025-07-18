@@ -1,20 +1,16 @@
+using Gmsh:gmsh
+using Random
 
 """
     initialize_gmsh()
 
-Initialise l'environnement Gmsh et prépare un nouveau modèle pour la génération de maillages.
+    Initialize GMSH and create a new model.
 
-# Description
-Cette fonction configure Gmsh en :
-1. Initialisant la bibliothèque Gmsh.
-2. Activant l'affichage des messages dans le terminal.
-3. Créant un nouveau modèle nommé `"TransfinitePlateWithInclusions"`.
-
+    # Notes
+    - Must be called before any other GMSH operations
+    - Sets terminal output level to 1 (basic messages)
+    - Creates a default model named "TransfinitePlateWithInclusions"
 """
-
-using Gmsh:gmsh
-using Random
-
 function initialize_gmsh()
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 1)

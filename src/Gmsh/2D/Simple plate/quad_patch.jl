@@ -1,3 +1,27 @@
+"""
+    generate_irregular_quad_patch_mesh(E_o, element_type; nx=4, ny=4, perturb=0.1, filename="quad_patch.msh")
+
+    Generate an irregular quadrilateral patch mesh with random perturbations.
+
+    # Arguments
+    - "E_o": Element order (1 for linear, 2 for quadratic, etc.)
+    - "element_type": Element type (":triangle" or ":quadrilateral")
+    - "nx": Number of elements in x-direction (default: 4)
+    - "ny": Number of elements in y-direction (default: 4)
+    - "perturb": Perturbation factor for interior nodes (default: 0.1)
+    - "filename": Output filename (default: "quad_patch.msh")
+
+    # Returns
+    - "nodes": Node coordinates matrix (N×2)
+    - "elements": Element connectivity matrix
+    - "border_nodes": Dictionary of border node indices
+
+    # Notes
+    - Creates a structured but irregular mesh by perturbing interior nodes
+    - Uses transfinite interpolation for mesh generation
+    - Boundary nodes remain on their original positions
+"""
+
 function generate_irregular_quad_patch_mesh(E_o, element_type; nx=4, ny=4, perturb=0.1, filename="quad_patch.msh")
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 0)

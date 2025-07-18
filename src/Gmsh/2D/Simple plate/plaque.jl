@@ -1,3 +1,30 @@
+"""
+    plaque(b, h, lc, lt1, lt2, filename, E_o, element_type::Symbol; show_gui=false)
+
+    Generate a 2D rectangular plate mesh using GMSH.
+
+    # Arguments
+    - "b": Width of the plate (x-direction)
+    - "h": Height of the plate (y-direction)
+    - "lc": Characteristic length for mesh size
+    - "lt1": Number of nodes along the horizontal edges (bottom and top)
+    - "lt2": Number of nodes along the vertical edges (left and right)
+    - "filename": Base name for output files
+    - "E_o": Element order (1 for linear, 2 for quadratic, etc.)
+    - "element_type::Symbol": Element type (":triangle" or ":quadrilateral")
+    - "show_gui::Bool=false": Whether to display the GMSH GUI (default: false)
+
+    # Returns
+    - "nodes": Node coordinates matrix (N×2)
+    - "elements": Element connectivity matrix
+    - "border_nodes": Dictionary of border node indices
+
+    # Notes
+    - Creates a structured mesh with transfinite interpolation
+    - Physical groups are created for boundaries (Bottom, Right, Top, Left)
+    - Outputs mesh to "filename.msh"
+"""
+
 function plaque(b, h, lc,lt1,lt2, filename, E_o, element_type::Symbol; show_gui=false)
 
     gmsh.initialize()
