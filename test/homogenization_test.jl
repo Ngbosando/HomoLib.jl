@@ -1,6 +1,5 @@
 using LinearAlgebra, SparseArrays, Statistics
 using CairoMakie, Test
-using Revise
 using HomoLib: generate_transfinite_plate_with_inclusions,
                 material_def, assemble_global_matrix,
                 HomogenizationBC, BoundaryCondition, solve!,
