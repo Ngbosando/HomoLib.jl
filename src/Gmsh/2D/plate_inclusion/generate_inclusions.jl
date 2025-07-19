@@ -55,7 +55,8 @@ function generate_inclusions(volume_fraction,
                           shape, 
                           N_inclu,
                           voids,
-                          rdn)
+                          rdn,
+                          to_rotate)
 
     # ==============================================
     # PART 1: INITIALIZATION AND PARAMETERS
@@ -166,7 +167,8 @@ function generate_inclusions(volume_fraction,
                     (r, b),
                     θ,
                     existing_inclusions,
-                    voids
+                    voids,
+                    to_rotate
                 )
 
             # Process successful inclusion creation

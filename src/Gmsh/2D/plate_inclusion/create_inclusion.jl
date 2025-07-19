@@ -97,7 +97,8 @@ function create_inclusion(
     size::Tuple{Float64, Float64}, 
     θ,
     existing_inclusions,
-    voids
+    voids,
+    to_rotate
 )
     for inc in existing_inclusions
         # Extract parameters of the existing inclusion.
@@ -147,11 +148,11 @@ function create_inclusion(
     if shape == :circle
         return create_circular_inclusion(x, y, size[1], voids)
     elseif shape == :square
-        return create_square_inclusion(x, y, size[1], size[2], θ, voids)
+        return create_square_inclusion(x, y, size[1], size[2], θ, voids, to_rotate)
     elseif shape == :triangle
-        return create_triangular_inclusion(x, y, size[1], θ, voids)
+        return create_triangular_inclusion(x, y, size[1], θ, voids, to_rotate)
     elseif shape == :ellipse
-        return create_elliptical_inclusion(x, y, size[1], size[2], θ, voids)
+        return create_elliptical_inclusion(x, y, size[1], size[2], θ, voids, to_rotate)
     else
         error("Unknown shape: $shape")
     end

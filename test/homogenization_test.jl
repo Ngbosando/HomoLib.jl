@@ -1,5 +1,6 @@
 using LinearAlgebra, SparseArrays, Statistics
 using CairoMakie, Test
+using Revise
 using HomoLib: generate_transfinite_plate_with_inclusions,
                 material_def, assemble_global_matrix,
                 HomogenizationBC, BoundaryCondition, solve!,
@@ -32,9 +33,9 @@ mutable struct ElemData
     order::Int
 end
 
-function setup_mesh(; width, height, volume_fraction,
+function setup_mesh(; width, height, volume_fraction,   
                     n_inclusions, Elem::ElemData,
-                    node_divisions, shape, output_file, voids, rdn)  # Renamed activate -> voids
+                    node_divisions, shape, output_file, voids, rdn, show_gui, to_rotate)  # Renamed activate -> voids
 
     ind_G, ind_D, ind_B, ind_H, ind_C,
     elements, Nₓ, Nᵧ, type_elem, _, boundary_element =
@@ -44,8 +45,9 @@ function setup_mesh(; width, height, volume_fraction,
             Elem.type, Elem.order,
             node_divisions[1], node_divisions[2];
             voids=voids,  # Pass voids parameter directly
-            show_gui=false,
-            rdn=rdn  # Disable randomization for reproducibility
+            show_gui=show_gui,
+            rdn=rdn,  # Disable randomization for reproducibility
+            to_rotate=to_rotate
         )
   
     boundary_element = boundary_element
@@ -478,17 +480,20 @@ end
 # =============================================
 # stokes homogenization
 # =============================================
-#  Elem = ElemData(:Tri6, 2, 2);
-#     mesh = setup_mesh(;
-#         width=1.0, height=1.0,
-#         volume_fraction=0.2, n_inclusions=1,
-#         Elem, node_divisions=(5, 5), shape=:circle,
-#         output_file="Test_plate_with_inclusions.msh",
-#         voids = false
-#     );
-# function run_stokesFlow_case(mesh::MeshData, Elem::ElemData)
-#     #   place holder
-# end
+ Elem = ElemData(:Tri6, 2, 2);
+    mesh = setup_mesh(;
+        width=1.0, height=1.0,
+        volume_fraction=0.2, n_inclusions=1,
+        Elem, node_divisions=(5, 5), shape=:square,
+        output_file="Test_plate_with_inclusions.msh",
+        voids = false,
+        rdn = false,
+        show_gui = true,
+        to_rotate = true
+    );
+function run_stokesFlow_case(mesh::MeshData, Elem::ElemData)
+    #   place holder
+end
 
 # Run Test
 # Reference: Yvonnet, Computational Homogenization of Heterogeneous Materials 

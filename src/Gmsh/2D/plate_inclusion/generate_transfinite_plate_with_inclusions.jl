@@ -79,7 +79,8 @@ function generate_transfinite_plate_with_inclusions(
     node_div_mat;
     voids=false,
     show_gui=false,
-    rdn = false
+    rdn = false,
+    to_rotate = false
 )
     # Initialization of Gmsh
     initialize_gmsh()
@@ -96,7 +97,8 @@ function generate_transfinite_plate_with_inclusions(
         shape,
         N_inclu,
         voids,
-        rdn
+        rdn,
+        to_rotate
     )
 
     # Creation of the plate surface with inclusions

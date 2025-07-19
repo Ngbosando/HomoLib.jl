@@ -20,7 +20,7 @@
     - Creates equilateral triangle centered at (x,y) and applies rotation
 """
 
-function create_triangular_inclusion(x, y, side_length, θ, voids)
+function create_triangular_inclusion(x, y, side_length, θ, voids, to_rotate )
     height = sqrt(3) / 2 * side_length  # Calculate the height of the equilateral triangle
    
     # Creation of points and lines
@@ -38,7 +38,17 @@ function create_triangular_inclusion(x, y, side_length, θ, voids)
     loop = gmsh.model.geo.addCurveLoop([L1, L2, L3])
     surface = voids ? nothing : gmsh.model.geo.addPlaneSurface([loop])
    
-    gmsh.model.geo.rotate([(2, surface)], x, y, 0.0, 0.0, 0.0, 1.0, θ)
+    # Rotate the square around its center
+    if surface !== nothing
+        rotate = [(2, surface)]                    # rotate the surface
+    else
+        rotate = [(1, l) for l in L]           # rotate the 4 lines
+        # —or— rotate the points instead:
+        # to_rotate = [(0, p) for p in pts]
+    end
+    if to_rotate
+        gmsh.model.geo.rotate([rotate], x, y, 0.0, 0.0, 0.0, 1.0, θ)
+    end
     
     return loop, surface, L
 end
