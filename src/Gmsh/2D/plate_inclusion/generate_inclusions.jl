@@ -119,7 +119,7 @@ function generate_inclusions(volume_fraction,
     # ==============================================
     # PART 4: INCLUSION GENERATION LOOP
     # ==============================================
-        while remaining_volume >= 1e-3 && attempt_count < 1e6 
+        while remaining_volume >= 1e-3 && attempt_count < 1e3 
             attempt_count += 1
             θ = 2*pi*rand() - pi  # Random rotation angle
 

@@ -25,7 +25,8 @@ function create_square_inclusion(x, y, size1, size2, θ,voids, to_rotate)
    
  
     a = size1 / 2
-    b = size2 / 2
+    b = size2 / 6
+    
     # Creation of points and lines
     plate_points = [
         gmsh.model.geo.addPoint(x - a, y - b, 0.0),

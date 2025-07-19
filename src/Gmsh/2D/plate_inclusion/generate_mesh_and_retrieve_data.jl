@@ -72,6 +72,7 @@ function generate_mesh_and_retrieve_data(output_file,
     # Configure mesh parameters based on element type
     # Special handling for quadrilateral/hex elements
         etype_str = string(element_type)
+        @show etype_str
         if startswith(etype_str, "Quad") || startswith(etype_str, "Hex")
             gmsh.option.setNumber("Mesh.RecombineAll", 1)
             gmsh.option.setNumber("Mesh.Algorithm", 11)
