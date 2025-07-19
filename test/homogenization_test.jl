@@ -479,17 +479,17 @@ end
 # =============================================
 # stokes homogenization
 # =============================================
- Elem = ElemData(:Tri6, 2, 2);
-    mesh = setup_mesh(;
-        width=1.0, height=1.0,
-        volume_fraction=0.2, n_inclusions=1,
-        Elem, node_divisions=(5, 5), shape=:square,
-        output_file="Test_plate_with_inclusions.msh",
-        voids = false,
-        rdn = false,
-        show_gui = true,
-        to_rotate = true
-    );
+#  Elem = ElemData(:Tri6, 2, 2);
+#     mesh = setup_mesh(;
+#         width=1.0, height=1.0,
+#         volume_fraction=0.2, n_inclusions=1,
+#         Elem, node_divisions=(5, 5), shape=:square,
+#         output_file="Test_plate_with_inclusions.msh",
+#         voids = false,
+#         rdn = false,
+#         show_gui = true,
+#         to_rotate = true
+#     );
 function run_stokesFlow_case(mesh::MeshData, Elem::ElemData)
     #   place holder
 end
@@ -523,7 +523,9 @@ end
         Elem, node_divisions=(3, 3), shape=:circle,
         output_file="Test_plate_with_inclusions_non_poro.msh",
         voids=false,  # Filled inclusions
-        rdn=false  # Disable randomization for reproducibility
+        rdn=false,  # Disable randomization for reproducibility
+        show_gui=false,  # Disable GUI for tests
+        to_rotate=false  # Disable rotation for tests
         )
         
         κ_eff = run_thermal_case(mesh, Elem)
@@ -550,7 +552,9 @@ end
         Elem, node_divisions=(3, 3), shape=:circle,
         output_file="Test_plate_with_inclusions_non_poro.msh",
         voids=false,  # Filled inclusions
-        rdn=false  # Disable randomization for reproducibility  
+        rdn=false,  # Disable randomization for reproducibility
+        show_gui=false,  # Disable GUI for tests
+        to_rotate=false  # Disable rotation for tests
     )
     
     C_eff = run_elastic_case(mesh, Elem)
@@ -586,9 +590,11 @@ end
         Elem, node_divisions=(3, 3), shape=:circle,
         output_file="Test_plate_with_inclusions_non_poro.msh",
         voids=false,  # Filled inclusionsts
-        rdn=false  # Disable randomization for reproducibility  
+        rdn=false,  # Disable randomization for reproducibility
+        show_gui=false,  # Disable GUI for tests
+        to_rotate=false  # Disable rotation for tests
     )
-    
+
     results = run_piezo_case(mesh, Elem)
 
     # Test stiffness components
@@ -629,7 +635,9 @@ end
         Elem, node_divisions=(10, 5), shape=:circle,
         output_file="Test_plate_with_inclusions_poro.msh",
         voids=true,  # empty inclusions
-        rdn=false  # Disable randomization for reproducibility
+        rdn=false,  # Disable randomization for reproducibility
+        show_gui=false,  # Disable GUI for tests
+        to_rotate=false  # Disable rotation for tests
     )
     
     results = run_poro_case(mesh, Elem)
