@@ -200,7 +200,7 @@ The numerical results successfully:
 The analysis generates three key figures:
 
 ### Figure 1: Convergence Study
-![Convergence Study: Stiffness evolution and standard deviation convergence](/Dev/HomoLib/docs/images/sensitivity_analysis/convergence_study.png)
+![Convergence Study: Stiffness evolution and standard deviation convergence](/docs/images/sensitivity_analysis/convergence_study.png)
 - Top row: Evolution of mean stiffness components
 - Bottom row: Convergence of standard deviations
 - Comparison between standard (blue) and contact (red) models
