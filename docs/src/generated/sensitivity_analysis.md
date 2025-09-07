@@ -206,14 +206,14 @@ The analysis generates three key figures:
 - Comparison between standard (blue) and contact (red) models
 
 ### Figure 2: Sensitivity Analysis
-![Sensitivity Analysis: Stiffness components with 95% confidence intervals](/Dev/HomoLib/docs/images/sensitivity_analysis/sensitivity_analysis.png)
+![Sensitivity Analysis: Stiffness components with 95% confidence intervals](/docs/images/sensitivity_analysis/sensitivity_analysis.png)
 - Four subplots for each stiffness component
 - Error bars showing 95% confidence intervals
 - Theoretical bounds overlaid for validation
 
 ### Figure 3: Constitutive Law
-![Constitutive Law: Stress-strain relationships for 40% porosity](/Dev/HomoLib/docs/images/sensitivity_analysis/constitutive_law_40percent.png)
-![Constitutive Law: Stress-strain relationships for 55% porosity](/Dev/HomoLib/docs/images/sensitivity_analysis/constitutive_law_60percent.png)
+![Constitutive Law: Stress-strain relationships for 40% porosity](/docs/images/sensitivity_analysis/constitutive_law_40percent.png)
+![Constitutive Law: Stress-strain relationships for 55% porosity](/docs/images/sensitivity_analysis/constitutive_law_60percent.png)
 - Stress-strain relationships for 40% & 55% porosity
 - Demonstrates asymmetric behavior in contact model
 - Includes uniaxial, shear, and Poisson effects
