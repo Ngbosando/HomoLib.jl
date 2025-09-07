@@ -23,8 +23,7 @@
 """
 
 function create_elliptical_inclusion(
-    x, y, a, b, θ, voids, to_rotate
-)
+    x, y, a, b, θ, voids, to_rotate)
 
     # Creation of points and arcs
    
@@ -49,8 +48,7 @@ function create_elliptical_inclusion(
         rotate = [(2, surface)]                    # rotate the surface
     else
         rotate = [(1, l) for l in C]           # rotate the 4 lines
-        # —or— rotate the points instead:
-        # to_rotate = [(0, p) for p in pts]
+
     end
     if to_rotate
         gmsh.model.geo.rotate([rotate], x, y, 0.0, 0.0, 0.0, 1.0, θ)

@@ -1,525 +1,665 @@
-include("compute_flux.jl")
-#-----------------------------------------------------------------
-# Main Function
-#-----------------------------------------------------------------
+include("compute_flux.jl") 
 
-    """
-        compute_effective_property(materials, elements, nodes, connect_elem_phase,
-                                solver_results, element_type, integration_order,
-                                dim, Geometric_Data)
+"""
+ElementMatrices for thermal property calculations.
+"""
+mutable struct ThermalPropertyMatrices{T<:AbstractFloat}
+    elem_sol::Matrix{T}         # Element solution vector 
+    K_eff::Matrix{T}            # Effective conductivity contribution 
+    volume::Base.RefValue{T}    # Element volume
+    ∇T_qp::Matrix{T}            # temperature gradient at quadrature points
+    q_qp::Matrix{T}             # heat flux at quadrature points
+end
 
-        Compute volume-averaged effective properties from FEM solution.
+"""
+ElementMatrices for elastic property calculations.
+"""
+mutable struct ElasticPropertyMatrices{T<:AbstractFloat}
+    elem_sol::Matrix{T}         # Element solution vector 
+    C_eff::Matrix{T}            # Effective stiffness contribution 
+    volume::Base.RefValue{T}    # Element volume
+    ε_qp::Matrix{T}             # strain at quadrature points
+    σ_qp::Matrix{T}             # stress at quadrature points
+end
 
-        # Arguments
-        - "materials": Single material or vector of materials for composites
-        - "elements": Element connectivity matrix (n_elem × nodes_per_elem)
-        - "nodes": Node coordinates (n_nodes × dim)
-        - "connect_elem_phase": Vector assigning material phase to each element
-        - "solver_results": Dictionary or NamedTuple of solution fields
-        - "element_type": Element type symbol (e.g., :Hex8)
-        - "integration_order": Numerical integration order
-        - "dim": Spatial dimension (2 or 3)
-        - "Geometric_Data": Precomputed geometric data (gauss_data, jacobian_cache, B_dicts)
+"""
+ElementMatrices for piezoelectric property calculations.
+"""
+mutable struct PiezoelectricPropertyMatrices{T<:AbstractFloat}
+    C_eff::Matrix{T}
+    e_eff::Matrix{T}
+    ε_eff::Matrix{T}
+    volume::Base.RefValue{T}
 
-        # Returns
-        Tuple:
-        1. NamedTuple of effective properties (varies by material physics)
-        2. Total volume of the domain
+    # SOLUTION MATRICES 
+    Uu_sol::Matrix{T}
+    Uϕ_sol::Matrix{T}
+    Vu_sol::Matrix{T}
+    Vϕ_sol::Matrix{T}
 
-        # Algorithm
-        1. Validate material consistency for composites
-        2. Initialize storage for global averages
-        3. Thread-parallel element processing:
-        - Retrieve element solution
-        - Compute element contributions
-        - Accumulate volume-averaged quantities
-        4. Final volume averaging
+    # QUADRATURE POINT Storage
+    ε_qp_u::Matrix{T}
+    ε_qp_v::Matrix{T} 
+    E_qp_u::Matrix{T}
+    E_qp_v::Matrix{T}
+    σ_qp::Matrix{T}
+    D_qp_u::Matrix{T}
+    D_qp_v::Matrix{T}
+end
 
-        # Notes
-        - For composites, "connect_elem_phase" must map each element to a material index
-        - Solution fields must match material physics requirements
-        - Properly handles generalized plane strain (out-of-plane symmetry)
-    """
-    function compute_effective_property(
-        materials::Union{Material, Vector{Material}},
-        elements::Matrix{Int},
-        nodes::Matrix{Float64},
-        connect_elem_phase::Union{Vector{Int}, Nothing},
-        solver_results::NamedTuple,
-        element_type::Symbol,
-        integration_order::Int,
-        dim::Int,
-        Geometric_Data)
-        
-        # ========== Phase Handling ========== #
-            is_composite = materials isa Vector{Material}
-            if is_composite
-                connect_elem_phase === nothing && error("connect_elem_phase required for composite materials")
-                length(connect_elem_phase) == size(elements, 1) || error("connect_elem_phase length mismatch")
+"""
+ElementMatrices for poroelastic property calculations.
+"""
+mutable struct PoroelasticPropertyMatrices{T<:AbstractFloat}
+    # ACCUMULATORS 
+    C_eff::Matrix{T}
+    Β_eff::Vector{T} # Stores ∫σ_p dV, which becomes Β_eff
+    volume::Base.RefValue{T}
 
-                unique_phases = sort(unique(connect_elem_phase))
-                length(materials) == length(unique_phases) || error("Material count mismatch with phases")
+    # SOLUTION VECTORS 
+    Uu_sol::Matrix{T} # Solution matrix for mechanical load cases
+    Up_sol::Vector{T} # Solution vector for the single pressure load case
 
-                phase_to_idx = Dict(zip(unique_phases, 1:length(unique_phases)))
+    # QUADRATURE POINT Storage
+    ε_qp_u::Matrix{T} # Strain matrix for mechanical cases
+    σ_qp_u::Matrix{T} # Stress matrix for mechanical cases
+    ε_qp_p::Vector{T} # Strain vector for pressure case
+    σ_qp_p::Vector{T} # Stress vector for pressure case
+end
 
-                # Validate all materials are consistent
-                ref_dofs = get_dofs_per_node(materials[1])
-                ref_B_types = materials[1].B_types
-                for mat in materials
-                    get_dofs_per_node(mat) == ref_dofs || error("Mismatch in dofs_per_node")
-                    mat.B_types == ref_B_types || error("Mismatch in B_types")
-                end
-                dofs_per_node = ref_dofs
-            else
-                dofs_per_node = get_dofs_per_node(materials)
-            end
+# Create Property Matrices 
 
-        # ========== Precomputation ========== #
-            gauss_data = Geometric_Data.gauss_data
-            jac_cache = Geometric_Data.jacobian_cache
-            B_dicts = Geometric_Data.B_dicts
-            ref_mat = is_composite ? materials[1] : materials
-        
+function create_property_matrices(mat::ThermalMaterial, NN::Int, n_load_cases::Int, T::Type=Float64)
+    D = mat.dim
+    return ThermalPropertyMatrices(
+        zeros(T, NN, n_load_cases),
+        zeros(T, D, n_load_cases),
+        Ref(zero(T)),
+        zeros(T, D, n_load_cases),
+        zeros(T, D, n_load_cases)
+    )
+end
 
-            # ========== Init Storage ========== #
-            result_template = init_global_storage(materials, dim)
-            nthreads = Threads.nthreads()
-            result_acc = [deepcopy(result_template) for _ in 1:nthreads]
-            vol_acc = zeros(nthreads)
-            global_dofs = assemble_global_dofs(elements, ref_mat)
+function create_property_matrices(mat::ElasticMaterial, NN::Int, n_load_cases::Int, T::Type=Float64)
+    D, nstr = mat.dim, rows_voigt(mat.dim, mat.symmetry)
+    return ElasticPropertyMatrices(
+        zeros(T, D * NN, n_load_cases),
+        zeros(T, nstr, n_load_cases),
+        Ref(zero(T)),
+        zeros(T, nstr, n_load_cases),
+        zeros(T, nstr, n_load_cases)
+    )
+end
 
-        # ========== Main Loop ========== #
-        @threads for e in 1:size(elements, 1)
-            tid = Threads.threadid()
-            mat = is_composite ? materials[phase_to_idx[connect_elem_phase[e]]] : materials
-            elem_nodes = global_dofs[e, :]
-    
-            elem_sol = init_element_solution(mat, elem_nodes, dim)
-            elem_sol = get_element_solution!(elem_sol, mat, elem_nodes, solver_results)
-            
-            mat_type = resolve_material_type(mat)
-            elem_result = compute_element_contribution(
-                Val(mat_type), mat, B_dicts[e], e, jac_cache, gauss_data, elem_sol
-            )
-
-            accumulate_results!(result_acc[tid], elem_result)
-            vol_acc[tid] += elem_result.volume
-            
-        end
-
-        # ========== Finalization ========== #
-            total_volume = sum(vol_acc)
-            final_result = finalize_results(result_acc, total_volume)
-
-        return final_result,total_volume
-    end
-#-----------------------------------------------------------------
-# Solution Initialization and Retrieval
-#-----------------------------------------------------------------
-    function init_element_solution(mat::Material, elem_nodes, dim::Int)
-        n_nodes = length(elem_nodes)
-        
-
-        if mat.type in ([:thermal], [:electric])
-            lc = get_load_case_count(mat, dim)
-            return zeros(n_nodes, lc)
-        elseif mat.type == [:elastic] && !haskey(mat.properties, :α_p)
-            if mat.symmetry == :out_of_plane && dim == 2
-                nstr = 4  # ε11, ε22, ε12, ε33
-            else
-                nstr = get_load_case_count(mat, dim)
-            end
-            return zeros(n_nodes, nstr)
-        # Handle coupled physics - piezoelectric case
-        elseif mat.type == [:elastic, :electric]
-            # Determine load case counts based on symmetry
-            if mat.symmetry == :out_of_plane && dim == 2
-                nstr = 4  # ε11, ε22, ε12, ε33
-                nelec = 3  # E1, E2, E3
-            else
-                nstr = get_load_case_count(Material(material.type, mat.dim, mat.symmetry, mat.properties, mat.tensors, mat.B_types,mat.mass_properties),dim)
-                nelec = dim
-            end
-            nodes = Int(n_nodes / (dim + 1))
-         
-            return (
-                U_u = zeros(dim * nodes, nstr),  # Displacement for ε̄ cases
-                V_u = zeros(dim * nodes, nelec),  # Displacement for Ē cases
-                U_ϕ = zeros(nodes, nstr),  # Potential for ε̄ cases
-                V_ϕ = zeros(nodes, nelec)  # Potential for Ē cases
-            )
-        elseif mat.type == [:elastic, :pressure] || haskey(mat.properties, :α_p)
-            # Determine load case counts based on symmetry
-            if mat.symmetry == :out_of_plane && dim == 2
-                nstr = 4  # ε11, ε22, ε12, ε33
-                np = 3  # E1, E2, E3
-            elseif haskey(mat.properties, :α_p) && :pressure ∉ mat.type
-                nstr = get_load_case_count(mat, dim) + 1
-                return zeros(n_nodes, nstr)
-
-            else
-                nstr = get_load_case_count(Material(material.type, mat.dim, mat.symmetry, mat.properties, mat.tensors, mat.B_types,mat.mass_properties),dim)
-                np = dim
-                nodes = Int(n_nodes / (dim + 1))
-
-                return (
-                U_u = zeros(dim * nodes, nstr),  # Displacement 
-                U_p = zeros(nodes, nstr),  # pressure 
-            )   
-            end
-            
-        
-        # Add other coupled physics here as needed
-        else
-            error("Unsupported material combination: $(mat.type)")
-        end
-    end
-
-    function get_element_solution!(elem_sol, mat::Material, elem_nodes, solver_results)
-        # Handle single physics materials
-        if length(mat.type) == 1
-            mat_type = mat.type[1]
-            if mat_type in (:thermal, :elastic, :viscoelastic)
-                Ns = length(solver_results.U)
-                for i in 1:Ns
-                    elem_sol[:, i] = solver_results.U[i][elem_nodes]
-                end
-                return elem_sol
-            end
-        
-        # Handle coupled physics - piezoelectric case
-        elseif mat.type == [:elastic, :electric]
-            nstr = size(elem_sol.U_u, 2)
-            nelec = size(elem_sol.V_ϕ, 2)
-
-            block = mat.dim + 1
-            elem_nodes_u = [elem_nodes[i] for i in eachindex(elem_nodes) if (i-1) % block <  mat.dim]
-            elem_nodes_ϕ = [elem_nodes[i] for i in eachindex(elem_nodes) if (i-1) % block == mat.dim]
-            # Retrieve mechanical solutions
-  
-            for i in 1:nstr
-                elem_sol.U_u[:, i] = solver_results.U_mech[i][elem_nodes_u]
-                elem_sol.U_ϕ[:, i] = solver_results.V_elec[i][elem_nodes_ϕ]
-            end
-            
-            # Retrieve electrical solutions
-            for i in 1:nelec
-                elem_sol.V_u[:, i] = solver_results.U_mech[nstr + i][elem_nodes_u]
-                elem_sol.V_ϕ[:, i] = solver_results.V_elec[nstr + i][elem_nodes_ϕ]
-            end
-            return elem_sol
-         elseif mat.type == [:elastic, :pressure] || haskey(mat.properties, :α_p)   
-                Ns = length(solver_results.U)
-                for i in 1:Ns
-                    elem_sol[:, i] = solver_results.U[i][elem_nodes]
-                end
-                return elem_sol
-        end
-    end
-
-#-----------------------------------------------------------------
-# Result Handling Utilities
-#-----------------------------------------------------------------
-    """
-        init_global_storage(materials, dim)
-
-        Initialize storage for global effective properties.
-
-        # Arguments
-        - "materials": Material definition(s)
-        - "dim": Spatial dimension
-
-        # Returns
-        NamedTuple with zero-initialized tensors appropriate for material physics
-
-        # Examples
-        - Thermal: (K = zeros(dim, dim),)
-        - Elastic: (C = zeros(nstr, nstr),)
-        - Piezoelectric: (C = ..., e = ..., ϵ = ...)
-    """
-    function init_global_storage(materials::Union{Material,Vector{Material}}, dim::Int)
-        mat = materials isa Vector ? materials[1] : materials
-        
-        # mat_type = resolve_material_type(mat.type)
-        if mat.type == [:thermal]
-            return (K = zeros(dim, dim),)
-
-        elseif  mat.type == [:elastic] && !haskey(mat.properties, :α_p)
-            nstr = get_load_case_count(mat, dim)
-            return (C = zeros(nstr, nstr),)
-
-        elseif  mat.type == [:elastic, :electric]
-            nstr = get_load_case_count( Material([:elastic], mat.dim, mat.symmetry, mat.properties, mat.tensors, mat.B_types,mat.mass_properties), dim)
-            if mat.symmetry == :out_of_plane
-                 nelec = 3  # Assuming 3D electric field components
-            else
-                nelec = dim
-            end
-           
-            return (
-                C = zeros(nstr, nstr),
-                e = zeros(nelec, nstr),
-                ϵ = zeros(nelec, nelec)
-            )
-
-        elseif  mat.type == :thermoelastic
-            return (
-                C = zeros(nstr, nstr),
-                β = zeros(nstr, dim),
-                κ = zeros(dim, dim)
-            )
-
-         elseif mat.type == [:elastic, :pressure] || haskey(mat.properties, :α_p)
-            nstr = get_load_case_count( Material([:elastic], mat.dim, mat.symmetry, mat.properties, mat.tensors, mat.B_types,mat.mass_properties), dim)
-            return (
-                C = zeros(nstr, nstr),
-                Β = zeros(nstr)
-            )
-
-        else
-            error("Unsupported material type: $( mat.type)")
-        end
-    end
-
-    function accumulate_results!(acc, elem_result)
-        for field in propertynames(elem_result)
-            if field != :volume && hasproperty(acc, field)
-                acc_field = getproperty(acc, field)
-                elem_field = getproperty(elem_result, field)
-                acc_field .+= elem_field
-            end
-        end
-    end
-
-    function finalize_results(results, total_volume)
-        final = deepcopy(results[1])
-        for field in propertynames(final)
-            final_field = getproperty(final, field)
-            sum_field = sum(r -> getproperty(r, field), results)
-            final_field .= sum_field ./ total_volume
-        end
-        return final
-    end
-
-#-----------------------------------------------------------------
-# Material Property Calculations
-#-----------------------------------------------------------------
-    """
-        compute_element_contribution(physics_type, mat, B_dict, elem_id, jacobian_data, gauss_data, Uᵉ)
-
-        Compute element-level contribution to effective properties.
-
-        # Arguments
-        - "physics_type": Val type identifying physics (:thermal, :elastic, etc.)
-        - "mat": Material definition
-        - "B_dict": B-matrices for the element
-        - "elem_id": Element ID
-        - "jacobian_data": Jacobian data at Gauss points
-        - "gauss_data": Shape function and weight data
-        - "Uᵉ": Element solution vector/matrix
-
-        # Returns
-        NamedTuple with:
-        - Property contributions (field names vary by physics)
-        - Element volume
-
-        # Implementation
-        - For thermal: Integrates heat flux q = -κ∇T
-        - For elastic: Integrates stress σ = Cε
-        - For piezoelectric: Integrates stress σ and electric displacement D
-        - For poroelastic: Integrates stress σ and Biot coupling
-    """
-    function compute_element_contribution(::Val{:thermal}, mat::Material, B_dict, elem_id, jacobian_data, gauss_data, Uᵉ)
-        κ = mat.tensors[1]
-        B = B_dict[:temperature_gradient]
-        K_eff = zero(κ)
-        volume = 0.0
-
-        for qp in eachindex(gauss_data.weights)
-            detJ, _ = jacobian_data[elem_id][qp]
-            scale =  abs(detJ) * gauss_data.weights[qp]
-            ∇T = B[qp] * Uᵉ
-
-            q = κ * ∇T
-
-            K_eff += q  * scale
-            volume += scale 
-        end
-
-        return (K = K_eff, volume = volume)
-    end
-
-    function compute_element_contribution(::Val{:elastic}, mat::Material, B_dict, elem_id, jacobian_data, gauss_data, Uᵉ)
-        C = mat.tensors[1]
-        B = B_dict[:strain]
-    
-        C_eff = zero(C)
-        volume = 0.0
-
-        for qp in eachindex(gauss_data.weights)
-            detJ, _ = jacobian_data[elem_id][qp]
-            scale = abs(detJ) * gauss_data.weights[qp]
-        
-            if mat.symmetry == :out_of_plane
-                M = zero(C); M[4, 4] = 1.0
-                ε = B[qp] * Uᵉ + M
-            else
-                ε = B[qp] * Uᵉ
-            end
-            
-            σ = C * ε
-         
-            C_eff += σ  * scale
-            volume += scale 
-        end
-
-        return (C = C_eff, volume = volume)
-    end
-    
-    function compute_element_contribution(::Val{:piezoelectric}, mat::Material, B_dict, elem_id, jacobian_data, gauss_data, Uᵉ)
-        C, ϵ, e = mat.tensors
-        B_u = B_dict[:strain]
-        B_e = B_dict[:electric_field]
-        Uᵤ = Uᵉ.U_u
-        Uᵩ = Uᵉ.U_ϕ
-
-
-        C_eff = zero(C)
-        e_eff = zero(e)
-        ϵ_eff = zero(ϵ)
-        volume = 0.0
-
-        for qp in eachindex(gauss_data.weights)
-            detJ, _ = jacobian_data[elem_id][qp]
-            scale =  abs(detJ) * gauss_data.weights[qp]
-            B_u_qp = B_u[qp]
-            B_ϕ_qp = B_e[qp]
-            
-            if mat.symmetry == :out_of_plane
-                M = zero(C); M[4, 4] = 1.0
-                ε = B_u_qp * Uᵤ + M
-            else
-                ε = B_u_qp * Uᵤ
-            end
-          
-            E = -B_ϕ_qp * Uᵩ
-            # Compute stress and electric displacement
-            σ = C * ε - transpose(e) * E
-            
-            D = e * ε + ϵ * E
-
-            E_ψ = B_ϕ_qp * Uᵉ.V_ϕ
-            if mat.symmetry == :out_of_plane 
-                D_k = zero(ϵ)
-                D_k[3,3] = 1.0  
-               
-                E_total = D_k + E_ψ
-            else
-                E_total = E_ψ  
-            end
-            # Compute strain and electric field
-            ε_ψ = B_u_qp * Uᵉ.V_u
-          
-            
-            # Compute electric displacement
-
-            D_ψ = e * ε_ψ + ϵ * E_total
-
-            # Accumulate effective properties
-            C_eff += σ  * scale
-            e_eff += D  * scale
-            ϵ_eff += D_ψ * scale
-
-            volume += scale
-        end
-
-        return (C = C_eff, e = e_eff, ϵ = ϵ_eff, volume = volume)
-    end
-
-    function compute_element_contribution(::Val{:poroelastic}, mat::Material, B_dict, elem_id, jacobian_data, gauss_data, Uᵉ)
-        C = mat.tensors[1]
-        B = B_dict[:strain]
-        Uᵤ = Uᵉ[:,1:end-1]
-        Uₚ = Uᵉ[:,end]
-     
-        C_eff = zero(C)
-        Β_eff = zeros(size(C,1))
+function create_property_matrices(mat::PiezoelectricMaterial, NN::Int, n_mech_lc::Int, n_elec_lc::Int, T::Type=Float64)
+    D = mat.dim
+    nstr = rows_voigt(D, mat.symmetry)
+    rG = vec_rows(D, mat.symmetry)
    
-        volume = 0.0
+    return PiezoelectricPropertyMatrices{T}(
+        zeros(T, nstr, n_mech_lc),   # C_eff
+        zeros(T, rG, n_mech_lc),     # e_eff
+        zeros(T, rG, n_elec_lc),     # ε_eff
+        Ref(zero(T)),                # volume
 
-        for qp in eachindex(gauss_data.weights)
-            detJ, _ = jacobian_data[elem_id][qp]
-            scale = abs(detJ) * gauss_data.weights[qp]
-        
-            if mat.symmetry == :out_of_plane
-                M = zero(C); M[4, 4] = 1.0
-                ε = B[qp] * Uᵤ + M
-            else
-                ε = B[qp] * Uᵤ
-            end
+        zeros(T, D * NN, n_mech_lc), # Uu_sol
+        zeros(T, NN, n_mech_lc),     # Uϕ_sol
+        zeros(T, D * NN, n_elec_lc), # Vu_sol
+        zeros(T, NN, n_elec_lc),     # Vϕ_sol
+
+        zeros(T, nstr, n_mech_lc), # ε_qp_u 
+        zeros(T, nstr, n_elec_lc), # ε_qp_v 
+        zeros(T, rG, n_mech_lc),   # E_qp_u 
+        zeros(T, rG, n_elec_lc),   # E_qp_v 
+        zeros(T, nstr, n_mech_lc), # σ_qp 
+        zeros(T, rG, n_mech_lc),   # D_qp_u 
+        zeros(T, rG, n_elec_lc)    # D_qp_v 
+    )
+end
+
+function create_property_matrices(mat::PoroelasticMaterial, NN::Int, n_mech_load_cases::Int, T::Type=Float64)
+    D, nstr = mat.dim, rows_voigt(mat.dim, mat.symmetry)
+    n_dofs_elem = D * NN
+    
+    return PoroelasticPropertyMatrices(
+        zeros(T, nstr, n_mech_load_cases), # C_eff
+        zeros(T, nstr),                   # Β_eff
+        Ref(zero(T)),                     # volume
+        zeros(T, n_dofs_elem, n_mech_load_cases), # Uu_sol
+        zeros(T, n_dofs_elem),            # Up_sol
+        zeros(T, nstr, n_mech_load_cases),# ε_qp_u 
+        zeros(T, nstr, n_mech_load_cases),# σ_qp 
+        zeros(T, nstr),                   # ε_qp_p 
+        zeros(T, nstr)                    # σ_qp_p 
+    )
+end
+
+# Element Contribution 
+
+function compute_element_contribution!(
+    prop_matrices::ThermalPropertyMatrices, mat::ThermalMaterial, B_e::BElem,
+    shp::FESD{NN,NGP,D}, jacs::BJacs, e::Int) where {NN,NGP,D}
+
+    fill!(prop_matrices.K_eff, 0.0)
+    prop_matrices.volume[] = 0.0
+    κ = mat.κ
+    G_e = B_e.vector_gradient_operator
+
+    @inbounds for qp in 1:NGP
+        dV = abs(jacs[qp, e][1]) * shp.weights[qp]
+        G_qp = @view G_e[:, :, qp]
+
+        mul!(prop_matrices.∇T_qp, G_qp, prop_matrices.elem_sol) # ∇T = G * Tₑ
+        mul!(prop_matrices.q_qp, κ, prop_matrices.∇T_qp)        # q = κ * ∇T
+
+        # Accumulate effective conductivity: K_eff += q * dV
+        prop_matrices.K_eff .+= prop_matrices.q_qp .* dV
+        prop_matrices.volume[] += dV
+    end
+end
+
+function compute_element_contribution!(
+    prop_matrices::ElasticPropertyMatrices, mat::ElasticMaterial, B_e::BElem,
+    shp::FESD{NN,NGP,D}, jacs::BJacs, e::Int) where {NN,NGP,D}
+
+    fill!(prop_matrices.C_eff, 0.0)
+    prop_matrices.volume[] = 0.0
+    C = mat.C
+    B_voigt_e = B_e.voigt_gradient_operator
+
+    @inbounds for qp in 1:NGP
+        dV = abs(jacs[qp, e][1]) * shp.weights[qp]
+        B_qp = @view B_voigt_e[:, :, qp]
+
+        # Calculate microscopic strain: ε = B * uₑ
+        mul!(prop_matrices.ε_qp, B_qp, prop_matrices.elem_sol)
+
+        if mat.symmetry == :out_of_plane
+            # adds the unit strain component in the out-of-plane direction (ε₃₃ = 1).
+            prop_matrices.ε_qp[end] += 1.0
+        end
+
+        # Calculate microscopic stress: σ = C * ε
+        if haskey(mat.properties, :cracks)
          
+            E = mat.properties[:E]
+            ν = mat.properties[:ν]
+            λ = (E * ν) / ((1 + ν) * (1 - 2ν))
+            μ = E / (2(1 + ν))
             
-            Β_eff -= C * B[qp] * Uₚ  * scale
-            σ = C * ε
-            C_eff += σ  * scale
-            volume += scale 
-        end
-
-                
-        return (C = C_eff,Β = Β_eff, volume = volume)
-    end
-
-    function compute_element_contribution(::Val{:viscoelastic}, mat::Material, B_dict, elem_id, jacobian_data, gauss_data, Uᵉ)
-        C, τ = mat.tensors  # τ unused here unless you model time
-        B = B_dict[:strain]
-
-        C_eff = zero(C)
-        volume = 0.0
-
-        for qp in eachindex(gauss_data.weights)
-            detJ, _ = jacobian_data[elem_id][qp]
-            scale = abs(detJ) * gauss_data.weights[qp]
-
-            ε = B[qp] * Uᵉ
-            σ = C * ε
-
-            C_eff += σ  * scale
-            volume += scale
-        end
-
-        return (C = C_eff, volume = volume)
-    end
-#-----------------------------------------------------------------
-# Helper Functions
-#-----------------------------------------------------------------
-    function get_load_case_count(mat::Material, dim::Int)
-        # mat_type = resolve_material_type(mat.type)
-        if mat.type in ([:thermal], :electric, :pressure)
-            if mat.symmetry == :isotropic
-                return dim  
-            elseif mat.symmetry == :out_of_plane && dim == 2 # Only in 2D
-                return 3
+            if compare_energy(prop_matrices.ε_qp, λ, μ; tol=1e-12)
+                # Reduce stiffness for cracked elements
+                C_reduced = 1e-8 * C
+                mul!(prop_matrices.σ_qp, C_reduced, prop_matrices.ε_qp)
             else
-                error("Unsupported symmetry: $(mat.symmetry)")
-            end
-
-        elseif mat.type == [:elastic] 
-            if mat.symmetry == :isotropic
-                return div(dim * (dim + 1), 2)  # 2D:3, 3D:6
-            elseif mat.symmetry == :transversely_isotropic
-                return dim == 2 ? 4 : 6
-            elseif mat.symmetry == :orthotropic
-                return dim == 2 ? 3 : 6
-            elseif mat.symmetry == :out_of_plane && dim == 2 # Only in 2D
-                return 4
-            else
-                error("Unsupported symmetry: $(mat.symmetry)")
+                mul!(prop_matrices.σ_qp, C, prop_matrices.ε_qp)
             end
         else
-            error("Unsupported material type: $(mat.type)")
+            # Compute stress: σ = C * ε
+            mul!(prop_matrices.σ_qp, C, prop_matrices.ε_qp)
         end
+
+        # Accumulate effective stiffness: C_eff += σ * dV
+        prop_matrices.C_eff .+= prop_matrices.σ_qp .* dV
+        prop_matrices.volume[] += dV
+    end
+end
+
+function compute_element_contribution!(
+    prop_matrices::PiezoelectricPropertyMatrices,
+    mat::PiezoelectricMaterial,
+    B_e::BElem,
+    shp::FESD{NN,NGP,D},
+    jacs::BJacs,
+    e::Int) where {NN, NGP, D}
+
+    fill!(prop_matrices.C_eff, 0.0)
+    fill!(prop_matrices.e_eff, 0.0)
+    fill!(prop_matrices.ε_eff, 0.0)
+    prop_matrices.volume[] = 0.0
+
+    C, ϵ_tensor, e_tensor = mat.C, mat.ε, mat.e
+    e_tensor_T = transpose(e_tensor)
+    Bv_e = B_e.voigt_gradient_operator
+    Gs_e = B_e.vector_gradient_operator
+ 
+    @inbounds for qp in 1:NGP
+
+        dV = abs(jacs[qp, e][1]) * shp.weights[qp]
+        Bv = @view Bv_e[:, :, qp]
+        Gs = @view Gs_e[:, :, qp]
+
+        # Contributions from Mechanical Load Cases (Uu, Uϕ)
+
+        # Microscopic strain: ε = Bᵤ * Uᵤ
+        mul!(prop_matrices.ε_qp_u, Bv, prop_matrices.Uu_sol)
+        if mat.symmetry == :out_of_plane
+            # Add unit matrix M where M[4,4] = 1.0 
+            prop_matrices.ε_qp_u[4, 4] += 1.0
+        end
+
+        # Microscopic electric field: E = -Bᵩ * Uᵩ
+        mul!(prop_matrices.E_qp_u, Gs, prop_matrices.Uϕ_sol, -1.0, 0.0)
+
+        # Stress: σ = C*ε - eᵀ*E
+        mul!(prop_matrices.σ_qp, C, prop_matrices.ε_qp_u)
+        mul!(prop_matrices.σ_qp, e_tensor_T, prop_matrices.E_qp_u, -1.0, 1.0)
+
+        # Electric Displacement: D = e*ε + εˢ*E
+        mul!(prop_matrices.D_qp_u, e_tensor, prop_matrices.ε_qp_u)
+        mul!(prop_matrices.D_qp_u, ϵ_tensor, prop_matrices.E_qp_u, 1.0, 1.0)
+
+        # Contributions from Electrical Load Cases (Vu, Vϕ)
+
+        # Strain from electrical loading: ε_ψ = Bᵤ * Vᵤ
+        mul!(prop_matrices.ε_qp_v, Bv, prop_matrices.Vu_sol)
+
+        # Electric field from electrical loading: E_ψ = Bᵩ * Vᵩ
+        mul!(prop_matrices.E_qp_v, Gs, prop_matrices.Vϕ_sol)
+        if mat.symmetry == :out_of_plane
+            # Add unit matrix D_k where D_k[3,3] = 1.0 
+            prop_matrices.E_qp_v[3, 3] += 1.0
+        end
+
+        # Electric Displacement: D_ψ = e*ε_ψ + εˢ*E_total
+        mul!(prop_matrices.D_qp_v, e_tensor, prop_matrices.ε_qp_v)
+        mul!(prop_matrices.D_qp_v, ϵ_tensor, prop_matrices.E_qp_v, 1.0, 1.0)
+
+        # Accumulate Integrated Results
+
+        # C_eff += σ * dV
+        prop_matrices.C_eff .+= prop_matrices.σ_qp .* dV
+
+        # e_eff += D * dV
+        prop_matrices.e_eff .+= prop_matrices.D_qp_u .* dV
+
+        # ε_eff += D_ψ * dV
+        prop_matrices.ε_eff .+= prop_matrices.D_qp_v .* dV
+
+        # Accumulate total volume
+        prop_matrices.volume[] += dV
+    end
+end
+
+function compute_element_contribution!(
+    prop_matrices::PoroelasticPropertyMatrices,
+    mat::PoroelasticMaterial,
+    B_e::BElem,
+    shp::FESD{NN,NGP,D},
+    jacs::BJacs,
+    e::Int) where {NN, NGP, D}
+
+    fill!(prop_matrices.C_eff, 0.0)
+    fill!(prop_matrices.Β_eff, 0.0)
+    prop_matrices.volume[] = 0.0
+
+    C = mat.C
+    B_voigt_e = B_e.voigt_gradient_operator
+
+    @inbounds for qp in 1:NGP
+        dV = abs(jacs[qp, e][1]) * shp.weights[qp]
+        B_qp = @view B_voigt_e[:, :, qp]
+
+        # Mechanical Loading Cases 
+        # Strain: ε = B * Uᵤ
+        mul!(prop_matrices.ε_qp_u, B_qp, prop_matrices.Uu_sol)
+        if mat.symmetry == :out_of_plane
+            # Add unit out-of-plane strain to all mechanical load cases
+            prop_matrices.ε_qp_u[end] .+= 1.0
+        end
+        
+        # Stress: σ = C * ε
+        mul!(prop_matrices.σ_qp_u, C, prop_matrices.ε_qp_u)
+
+        # Accumulate: C_eff += σ * dV
+        prop_matrices.C_eff .+= prop_matrices.σ_qp_u .* dV
+
+        # Pressure Loading Case 
+        # Strain from pressure field: ε_p = B * Uₚ
+        mul!(prop_matrices.ε_qp_p, B_qp, prop_matrices.Up_sol)
+        
+        # Accumulate: Β_eff -= C * ε_p * dV
+        mul!(prop_matrices.σ_qp_p, C, prop_matrices.ε_qp_p)
+        prop_matrices.Β_eff .-= prop_matrices.σ_qp_p .* dV
+        
+        # Accumulate Total Volume
+        prop_matrices.volume[] += dV
+    end
+end
+
+# Solution Retrieval and Storage Initialization
+
+function get_element_solution!(prop_matrices::Union{ThermalPropertyMatrices, ElasticPropertyMatrices}, 
+                               solver_results, elem_dofs::AbstractVector{Int})
+    for i in 1:size(prop_matrices.elem_sol, 2)
+        prop_matrices.elem_sol[:, i] .= solver_results.U[i][elem_dofs]
+    end
+end
+
+function get_element_solution!(prop_matrices::PiezoelectricPropertyMatrices, 
+                               solver_results, elem_dofs_u, elem_dofs_ϕ)
+    n_mech_lc = size(prop_matrices.Uu_sol, 2)
+    n_elec_lc = size(prop_matrices.Vu_sol, 2)
+ 
+    for i in 1:n_mech_lc
+        prop_matrices.Uu_sol[:, i] .= solver_results.U_mech[i][elem_dofs_u]
+        prop_matrices.Uϕ_sol[:, i] .= solver_results.V_elec[i][elem_dofs_ϕ]
+    end
+    for i in 1:n_elec_lc
+        prop_matrices.Vu_sol[:, i] .= solver_results.U_mech[n_mech_lc + i][elem_dofs_u]
+        prop_matrices.Vϕ_sol[:, i] .= solver_results.V_elec[n_mech_lc + i][elem_dofs_ϕ]
+    end
+end
+
+function get_element_solution!(prop_matrices::PoroelasticPropertyMatrices, 
+    solver_results::NamedTuple, elem_dofs::AbstractVector{Int})
+
+    n_mech_load_cases = length(solver_results.U) - 1
+    
+    for i in 1:n_mech_load_cases
+        prop_matrices.Uu_sol[:, i] .= solver_results.U[i][elem_dofs]
     end
 
-    function ntens(dim)
-        dim == 2 ? 3 : 6
+    prop_matrices.Up_sol[:] .= solver_results.U[end][elem_dofs]
+end
+
+# initialization functions
+
+function init_thermal_storage(mat::ThermalMaterial, n_lc::Int)
+    return (K = zeros(mat.dim, n_lc),)
+end
+
+function init_elastic_storage(mat::ElasticMaterial, n_lc::Int)
+    return (C = zeros(rows_voigt(mat.dim, mat.symmetry), n_lc),)
+end
+
+function init_piezo_storage(mat::PiezoelectricMaterial, n_mech_lc::Int, n_elec_lc::Int)
+    D = mat.dim
+    return (
+        C = zeros(rows_voigt(D, mat.symmetry), n_mech_lc),
+        e = zeros(vec_rows(D, mat.symmetry), n_mech_lc),
+        ϵ = zeros(vec_rows(D, mat.symmetry), n_elec_lc)
+    )
+end
+
+function init_poroelastic_storage(mat::PoroelasticMaterial, n_mech_load_cases::Int)
+    nstr = rows_voigt(mat.dim, mat.symmetry)
+    return (
+        C = zeros(nstr, n_mech_load_cases),
+        Β = zeros(nstr) 
+    )
+end
+
+# specializations for each material 
+
+function compute_effective_property_thermal(
+    materials::Vector{ThermalMaterial{M}},
+    connectivity::Matrix{Int},
+    material_indices_per_element::Vector{Int},
+    solver_results::NamedTuple,
+    NN::Int,
+    geom::GeometricData) where {M}
+
+    Ne = size(connectivity, 1)
+    nthreads = Threads.nthreads()
+    n_load_cases = length(solver_results.U)
+    
+    result_template = init_thermal_storage(materials[1], n_load_cases)
+    result_acc = [deepcopy(result_template) for _ in 1:nthreads]
+    vol_acc = zeros(nthreads)
+    
+    prop_matrices_per_thread = [[create_property_matrices(m, NN, n_load_cases) for m in materials] for _ in 1:nthreads]
+    
+    dofs_per_node = get_dofs_per_node(materials[1])
+    single_field_dofs_buf = [Vector{Int}(undef, NN * dofs_per_node) for _ in 1:nthreads]
+
+
+    @inbounds Threads.@threads for e in 1:Ne
+        tid = Threads.threadid()
+        mat_idx = material_indices_per_element[e]
+        mat = materials[mat_idx]
+        prop_matrices = prop_matrices_per_thread[tid][mat_idx]
+        conn_e = @view connectivity[e, :]
+        dofs_buf = single_field_dofs_buf[tid]
+        
+        dof_offsets = 1:dofs_per_node
+        for a in 1:NN
+            base = (conn_e[a] - 1) * dofs_per_node
+            cols = (a - 1) * dofs_per_node + 1 : a * dofs_per_node
+            dofs_buf[cols] .= base .+ dof_offsets
+        end
+        
+        get_element_solution!(prop_matrices, solver_results, dofs_buf)
+        
+        compute_element_contribution!(
+            prop_matrices, mat, geom.differential_operator_matrices[e],
+            geom.shape_function_data, geom.jacobian_transformation_data, e
+        )
+        
+        result_acc[tid].K .+= prop_matrices.K_eff
+        vol_acc[tid] += prop_matrices.volume[]
     end
+    
+    # Finalize results
+    total_volume = sum(vol_acc)
+    final_K = sum(r.K for r in result_acc) ./ total_volume
+    
+    return (K = final_K,), total_volume
+end
+
+function compute_effective_property_elastic(
+    materials::Vector{ElasticMaterial{M}},
+    connectivity::Matrix{Int},
+    material_indices_per_element::Vector{Int},
+    solver_results::NamedTuple,
+    NN::Int,
+    geom::GeometricData) where {M}
+
+    Ne = size(connectivity, 1)
+    nthreads = Threads.nthreads()
+    n_load_cases = length(solver_results.U)
+    
+    result_template = init_elastic_storage(materials[1], n_load_cases)
+    result_acc = [deepcopy(result_template) for _ in 1:nthreads]
+    vol_acc = zeros(nthreads)
+    
+    prop_matrices_per_thread = [[create_property_matrices(m, NN, n_load_cases) for m in materials] for _ in 1:nthreads]
+    
+    dofs_per_node = get_dofs_per_node(materials[1])
+    single_field_dofs_buf = [Vector{Int}(undef, NN * dofs_per_node) for _ in 1:nthreads]
+    
+    @inbounds Threads.@threads for e in 1:Ne
+        tid = Threads.threadid()
+        mat_idx = material_indices_per_element[e]
+        mat = materials[mat_idx]
+        prop_matrices = prop_matrices_per_thread[tid][mat_idx]
+        conn_e = @view connectivity[e, :]
+        dofs_buf = single_field_dofs_buf[tid]
+        
+        dof_offsets = 1:dofs_per_node
+        for a in 1:NN
+            base = (conn_e[a] - 1) * dofs_per_node
+            cols = (a - 1) * dofs_per_node + 1 : a * dofs_per_node
+            dofs_buf[cols] .= base .+ dof_offsets
+        end
+        
+        get_element_solution!(prop_matrices, solver_results, dofs_buf)
+        
+        compute_element_contribution!(
+            prop_matrices, mat, geom.differential_operator_matrices[e],
+            geom.shape_function_data, geom.jacobian_transformation_data, e
+        )
+        
+        result_acc[tid].C .+= prop_matrices.C_eff
+        vol_acc[tid] += prop_matrices.volume[]
+    end
+    
+    total_volume = sum(vol_acc)
+    final_C = sum(r.C for r in result_acc) ./ total_volume
+    
+    return (C = final_C,), total_volume
+end
+
+function compute_effective_property_piezo(
+    materials::Vector{PiezoelectricMaterial{M1,M2,M3}},
+    connectivity::Matrix{Int},
+    material_indices_per_element::Vector{Int},
+    solver_results::NamedTuple,
+    NN::Int,
+    dim::Int,
+    geom::GeometricData) where {M1,M2,M3}
+  
+    Ne = size(connectivity, 1)
+    nthreads = Threads.nthreads()
+    n_mech_lc = size(materials[1].C,1)
+    n_elec_lc = size(materials[1].ε,1) 
+    
+    result_template = init_piezo_storage(materials[1], n_mech_lc, n_elec_lc)
+    result_acc = [deepcopy(result_template) for _ in 1:nthreads]
+    vol_acc = zeros(nthreads)
+    
+    prop_matrices_per_thread = [[create_property_matrices(m, NN, n_mech_lc, n_elec_lc) for m in materials] for _ in 1:nthreads]
+    
+    dofs_per_node = get_dofs_per_node(materials[1])
+    Nu = dofs_u_per_node(materials[1])
+    mech_dofs_buf = [Vector{Int}(undef, Nu * NN) for _ in 1:nthreads]
+    scalar_dofs_buf = [Vector{Int}(undef, NN) for _ in 1:nthreads]
+
+    @inbounds Threads.@threads for e in 1:Ne
+        tid = Threads.threadid()
+        mat_idx = material_indices_per_element[e]
+        mat = materials[mat_idx]
+        prop_matrices = prop_matrices_per_thread[tid][mat_idx]
+        conn_e = @view connectivity[e, :]
+
+        local_mech_dofs!(mech_dofs_buf[tid], conn_e, dofs_per_node, dim)
+        local_scal_dofs!(scalar_dofs_buf[tid], conn_e, dofs_per_node, dim, 1)
+        
+        get_element_solution!(prop_matrices, solver_results, mech_dofs_buf[tid], scalar_dofs_buf[tid])
+            
+        compute_element_contribution!(
+            prop_matrices, mat, geom.differential_operator_matrices[e],
+            geom.shape_function_data, geom.jacobian_transformation_data, e
+        )
+        
+        result_acc[tid].C .+= prop_matrices.C_eff
+        result_acc[tid].e .+= prop_matrices.e_eff
+        result_acc[tid].ϵ .+= prop_matrices.ε_eff
+        vol_acc[tid] += prop_matrices.volume[]
+    end
+    
+    # Finalize results
+    total_volume = sum(vol_acc)
+    final_C = sum(r.C for r in result_acc) ./ total_volume
+    final_e = sum(r.e for r in result_acc) ./ total_volume
+    final_ε = sum(r.ϵ for r in result_acc) ./ total_volume
+    
+    return (C = final_C, e = final_e, ϵ = final_ε), total_volume
+end
+
+function compute_effective_property_poroelastic(
+    materials::Vector{PoroelasticMaterial{M}},
+    connectivity::Matrix{Int},
+    material_indices_per_element::Vector{Int},
+    solver_results::NamedTuple,
+    NN::Int,
+    geom::GeometricData) where {M}
+
+    Ne = size(connectivity, 1)
+    nthreads = Threads.nthreads()
+    n_mech_load_cases = length(solver_results.U) - 1
+    
+    result_template = init_poroelastic_storage(materials[1], n_mech_load_cases)
+    result_acc = [deepcopy(result_template) for _ in 1:nthreads]
+    vol_acc = zeros(nthreads)
+    
+    prop_matrices_per_thread = [[create_property_matrices(m, NN, n_mech_load_cases) for m in materials] for _ in 1:nthreads]
+    
+    dofs_per_node = get_dofs_per_node(materials[1])
+    dofs_buf_per_thread = [Vector{Int}(undef, NN * dofs_per_node) for _ in 1:nthreads]
+    
+    @inbounds Threads.@threads for e in 1:Ne
+        tid = Threads.threadid()
+        mat_idx = material_indices_per_element[e]
+        mat = materials[mat_idx]
+        prop_matrices = prop_matrices_per_thread[tid][mat_idx]
+        conn_e = @view connectivity[e, :]
+        dofs_buf = dofs_buf_per_thread[tid]
+
+        for a in 1:NN
+            base = (conn_e[a] - 1) * dofs_per_node
+            cols = (a - 1) * dofs_per_node + 1 : a * dofs_per_node
+            dofs_buf[cols] .= base .+ (1:dofs_per_node)
+        end
+        
+        get_element_solution!(prop_matrices, solver_results, dofs_buf)
+
+        compute_element_contribution!(
+            prop_matrices, mat, geom.differential_operator_matrices[e],
+            geom.shape_function_data, geom.jacobian_transformation_data, e
+        )
+
+        result_acc[tid].C .+= prop_matrices.C_eff
+        result_acc[tid].Β .+= prop_matrices.Β_eff
+        vol_acc[tid] += prop_matrices.volume[]
+    end
+
+    total_volume = sum(vol_acc)
+    final_C = sum(r.C for r in result_acc) ./ total_volume
+    final_B = sum(r.Β for r in result_acc) ./ total_volume
+    
+    return (C = final_C, Β = final_B), total_volume
+end
+
+# Main dispatcher function 
+
+function compute_effective_property(
+    materials::Vector{M},
+    connectivity::Matrix{Int},
+    connect_elem_phase::Vector{Int},
+    solver_results::NamedTuple,
+    dim::Int,
+    geom::GeometricData) where {M<:AbstractMaterial}
+
+    Ne, NN = size(connectivity)
+    
+    # Phase handling 
+    unique_phases = sort(unique(connect_elem_phase))
+    phase_to_material_idx = Dict{Int, Int}(phase => i for (i, phase) in enumerate(unique_phases))
+    material_indices_per_element = [phase_to_material_idx[p] for p in connect_elem_phase]
+
+    # dispatch based on material type
+    if M <: ThermalMaterial
+        return compute_effective_property_thermal(
+            materials, connectivity, material_indices_per_element, solver_results, NN, geom
+        )
+    elseif M <: ElasticMaterial
+        return compute_effective_property_elastic(
+            materials, connectivity, material_indices_per_element, solver_results, NN, geom
+        )
+    elseif M <: PiezoelectricMaterial
+        return compute_effective_property_piezo(
+            materials, connectivity, material_indices_per_element, solver_results, NN, dim, geom
+        )
+    elseif M <: PoroelasticMaterial
+        return compute_effective_property_poroelastic(
+            materials, connectivity, material_indices_per_element, solver_results, NN, geom
+        )
+        
+    else
+        error("Unsupported material type: $(typeof(M))")
+    end
+end
+
+# single material case
+function compute_effective_property(
+    material::M,
+    connectivity::Matrix{Int},
+    solver_results::NamedTuple,
+    dim::Int,
+    geom::GeometricData) where {M<:AbstractMaterial}
+    
+    Ne = size(connectivity, 1)
+    connect_elem_phase = ones(Int, Ne)
+    return compute_effective_property([material], connectivity, connect_elem_phase, solver_results, dim, geom)
+end

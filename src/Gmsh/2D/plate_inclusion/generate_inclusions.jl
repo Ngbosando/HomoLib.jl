@@ -58,9 +58,8 @@ function generate_inclusions(volume_fraction,
                           rdn,
                           to_rotate)
 
-    # ==============================================
-    # PART 1: INITIALIZATION AND PARAMETERS
-    # ==============================================
+    # INITIALIZATION AND PARAMETERS
+
         inclusion_loops = Int[]
         inclusion_surfaces = Int[]
         inclusion_borders = []
@@ -70,10 +69,8 @@ function generate_inclusions(volume_fraction,
         attempt_count = 0
         max_attempts = 1e4
 
-    # ==============================================
-    # PART 2: SHAPE-SPECIFIC SIZE CALCULATIONS
-    # ==============================================
-    # Determine base sizes based on the shape
+    # SHAPE-SPECIFIC SIZE CALCULATIONS
+
         if shape == :circle
             r = plate_width * sqrt(volume_fraction / (N_inclu * π))   
             b = r    
@@ -98,10 +95,8 @@ function generate_inclusions(volume_fraction,
         attempt_inclu = 0
         num_inclusions = 0
 
-    # ==============================================
-    # PART 3: HELPER FUNCTIONS
-    # ==============================================
-    # Calculate margins for rotated triangle
+    # HELPER FUNCTIONS
+
         function triangle_margins(r, θ)
             v1 = (-r/2, -r/3)
             v2 = ( r/2, -r/3)
@@ -116,14 +111,12 @@ function generate_inclusions(volume_fraction,
             return margin_x, margin_y
         end
 
-    # ==============================================
-    # PART 4: INCLUSION GENERATION LOOP
-    # ==============================================
+    # INCLUSION GENERATION LOOP
+
         while remaining_volume >= 1e-3 && attempt_count < 1e3 
             attempt_count += 1
-            θ = 2*pi*rand() - pi  # Random rotation angle
+            θ = 2*pi*rand() - pi  
 
-            # Calculate shape margins based on type
                 if shape == :circle
                     margin_x = r
                     margin_y = r
@@ -140,7 +133,6 @@ function generate_inclusions(volume_fraction,
                     error("Unknown shape: $shape")
                 end
 
-            # Skip if shape is too large for plate
                 if margin_x > plate_width/2 || margin_y > plate_height/2
                     continue
                 end
@@ -155,11 +147,9 @@ function generate_inclusions(volume_fraction,
                 x = xmin + (xmax - xmin)*rand()
                 y = ymin + (ymax - ymin)*rand()
             else
-                # Fixed point in the center (currently used)
                 x = plate_width / 2
                 y = plate_height / 2
             end
-            # Attempt to create inclusion
                 result = create_inclusion(
                     shape,
                     x, 
@@ -171,11 +161,9 @@ function generate_inclusions(volume_fraction,
                     to_rotate
                 )
 
-            # Process successful inclusion creation
                 if result !== nothing
                     loop, surface, border = result
                     
-                    # Store inclusion parameters
                     push!(existing_inclusions, (x, y, r, b, θ))
                     push!(inclusion_loops, loop)
                     voids ? nothing : push!(inclusion_surfaces, surface)
@@ -193,18 +181,16 @@ function generate_inclusions(volume_fraction,
                         remaining_volume -= (π * r * b) / plate_width^2
                     end
 
-                    attempt_inclu = 0  # Reset attempt counter
+                    attempt_inclu = 0 
                 else
                     attempt_inclu += 1
                 end
 
-            # ==============================================
-            # PART 5: ADAPTIVE SIZE ADJUSTMENT
-            # ==============================================
+            # ADAPTIVE SIZE ADJUSTMENT
+
                 if attempt_inclu == max_attempts
-                    N_inclu += 1  # Try with more inclusions
+                    N_inclu += 1 
                     
-                    # Recalculate sizes based on remaining volume
                     if shape == :circle
                         r = plate_width * sqrt(remaining_volume / (N_inclu * π))       
                     elseif shape == :square
@@ -223,7 +209,7 @@ function generate_inclusions(volume_fraction,
                         println("Unknown shape: $shape")
                     end
                     
-                    attempt_inclu = 0  # Reset attempt counter
+                    attempt_inclu = 0  
                 end
         end
 

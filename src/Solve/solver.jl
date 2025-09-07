@@ -1,319 +1,176 @@
-# =============================================
-# Data Structures
-# =============================================
-    """
-        BoundaryCondition
+#  ABSTRACT TYPE DEFINITIONS
 
-        Standard boundary condition for finite element analysis.
+abstract type AbstractBoundaryCondition end
+abstract type StandardBC <: AbstractBoundaryCondition end
+abstract type HomogenizationBC{BC_TYPE, M} <: AbstractBoundaryCondition end
 
-        # Fields
-        - "type::Symbol": :dirichlet, :neumann, or :periodic
-        - "nodes_dof::Union{Vector{Int}, Tuple{Vector{Int}, Vector{Int}}}":
-        - For Dirichlet/Neumann: Node IDs
-        - For Periodic: (master_nodes, slave_nodes)
-        - "dof_mask::Union{Vector{Bool}, Nothing}": Boolean mask for constrained DOFs
-        - "macro_matrix::Union{Vector{Float64}, Nothing}": Prescribed values
-        - "dofs_per_node::Int": Degrees of freedom per node
+# Standard Boundary Conditions
+struct DirichletBC{T<:Real, VI<:AbstractVector{Int}, VV<:AbstractVector{T}, VB<:AbstractVector{Bool}} <: StandardBC
+    nodes::VI
+    dof_mask::VB
+    values::VV
+    dofs_per_node::Int
+end
 
-        # Examples
-        ```julia
-        # Fix x-direction for nodes 1-5
-        bc = BoundaryCondition(:dirichlet, 1:5, [true, false], [0.0], 2)
+struct PeriodicBC{VI<:AbstractVector{Int}} <: StandardBC
+    master_nodes::VI
+    slave_nodes::VI
+    dofs_per_node::Int
+end
 
-        # Periodic constraints between left and right faces
-        bc = BoundaryCondition(:periodic, (left_nodes, right_nodes), nothing, nothing, 3)
-    """
-    struct BoundaryCondition
-        type::Symbol           # :dirichlet, :neumann, :periodic
-        nodes_dof::Union{Vector{Int}, Tuple{Vector{Int}, Vector{Int}}}
-        dof_mask::Union{Vector{Bool}, Nothing}        # True/false mask for DOF constraints
-        macro_matrix::Union{Vector{Float64}, Nothing} # Imposed values (Dirichlet/Neumann)
-        dofs_per_node::Int
-    end
+# Homogenization Boundary Conditions
+struct DirichletHomogenizationBC{M<:AbstractMatrix{<:Real}, VI<:AbstractVector{Int}, VB<:AbstractVector{Bool}, MC<:AbstractMatrix{<:Real}} <: HomogenizationBC{:dirichlet, M}
+    macro_matrix::M
+    boundary_nodes::VI
+    coords::MC
+    dofs_per_node::Int
+    dof_mask::VB
+end
 
-    function Base.show(io::IO, bc::BoundaryCondition)
-        println(io, "BoundaryCondition(type = $(bc.type),")
-        println(io, "  nodes_dof = $(bc.nodes_dof),")
-        println(io, "  dofs_per_node = $(bc.dofs_per_node),")
-        println(io, "  dof_mask = ", bc.dof_mask === nothing ? "nothing" : bc.dof_mask)
-        println(io, "  macro_matrix = ", bc.macro_matrix === nothing ? "nothing" : bc.macro_matrix, ")")
-    end
-    """
-        HomogenizationBC
+struct PeriodicHomogenizationBC{M<:AbstractMatrix{<:Real}, VI<:AbstractVector{Int}, MC<:AbstractMatrix{<:Real}, VB<:AbstractVector{Bool}} <: HomogenizationBC{:periodic, M}
+    macro_matrix::M
+    node_pairs::Tuple{VI, VI}
+    coords::MC
+    dofs_per_node::Int
+    dof_mask::VB
+end
 
-        Specialized boundary condition for computational homogenization.
+#  UTILITY FUNCTIONS 
 
-        # Fields
-        - "type::Symbol": :dirichlet, :neumann, or :periodic
-        - "macro_matrix": Macroscopic strain/stress tensor
-        - "node_pairs::Union{Tuple{Vector{Int}, Vector{Int}}, Nothing}": (master_nodes, slave_nodes)
-        - "nodes_dof::Union{Vector{Int}, Nothing}": Optional direct DOF specification
-        - "dof_mask::Union{Vector{Bool}, Nothing}": Boolean mask for constrained DOFs
-        - "coords::Matrix{Float64}": Nodal coordinates (N×dim matrix)
-        - "dofs_per_node::Int": Degrees of freedom per node
-
-        # Notes
-        - "macro_matrix" interpretation:
-        - Dirichlet: Strain tensor (voigt or matrix form)
-        - Neumann: Stress tensor
-        - "node_pairs" should be matched using "match_opposite_periodic_nodes"
-        - "coords" used to compute position-dependent constraints
-
-        # Examples
-        ```julia
-        # 2% strain in xx-direction
-        bc = HomogenizationBC(:dirichlet, [0.02 0; 0 0], nothing, [true, false], nodes, 2)
-
-        # Periodic BC with 500 node pairs
-        bc = HomogenizationBC(:periodic, G_macro, node_pairs, nothing, trues(3), nodes, 3)
-    """
-    struct HomogenizationBC
-        type::Symbol                    # :dirichlet, :neumann, :periodic
-        macro_matrix::Union{Matrix{Float64}, Vector{Float64}, Nothing} # Macro-scale matrix (Gmacro or Emacro)
-        node_pairs::Union{Tuple{Vector{Int}, Vector{Int}}, Nothing}
-        nodes_dof::Union{Vector{Int}, Nothing}
-        dof_mask::Union{Vector{Bool}, Nothing}
-        coords::Union{Matrix{Float64}, Nothing}       # N×dim matrix of nodal coordinates
-        dofs_per_node::Int
-    end
-
-    function Base.show(io::IO, bc::HomogenizationBC)
-        println(io, "HomogenizationBC(type = $(bc.type),")
-        println(io, "  nodes_dof = $(bc.nodes_dof),")
-        println(io, "  node_pairs = $(bc.node_pairs),")
-        println(io, "  dofs_per_node = $(bc.dofs_per_node),")
-        println(io, "  dof_mask = ", bc.dof_mask === nothing ? "nothing" : bc.dof_mask)
-        println(io, "  macro_matrix = ", bc.macro_matrix === nothing ? "nothing" : "$((bc.macro_matrix))")
-        println(io, "  coords = ", bc.coords === nothing ? "nothing" : "$(size(bc.coords))", ")")
-    end
-
-# =============================================
-# Main Solver Function
-# =============================================
-
-    function solve!(
-        K::Union{SparseMatrixCSC{Float64,Int}, Matrix{Float64}},
-        f::Vector{Float64},
-        u::Vector{Float64},
-        bcs::Union{BoundaryCondition, HomogenizationBC, AbstractVector};
-        problem_type::Symbol=:linear)
-        # Normalize input to vector of BCs
-        bcs = bcs isa Union{BoundaryCondition, HomogenizationBC} ? [bcs] : bcs
-        
-        # Validate all boundary conditions
-        for bc in bcs
-            bc isa Union{BoundaryCondition, HomogenizationBC} || 
-            error("Invalid BC type: $(typeof(bc)). Must be BoundaryCondition or HomogenizationBC")
+function get_global_dofs(nodes::AbstractVector{Int}, dofs_per_node::Int)
+    num_nodes = length(nodes)
+    global_dofs = Vector{Int}(undef, num_nodes * dofs_per_node)
+    @inbounds for (i, node) in enumerate(nodes)
+        offset = (i - 1) * dofs_per_node
+        base_dof = (node - 1) * dofs_per_node
+        for j in 1:dofs_per_node
+            global_dofs[offset + j] = base_dof + j
         end
-        
-        # Sort BCs: Dirichlet first, then Neumann, then Periodic
-        sorted_bcs = sort(bcs, by=bc -> bc.type == :dirichlet ? 1 : bc.type == :neumann ? 2 : 3)
-        
-        # Initialize system matrices
-        K_current = copy(K)
-        F_current = copy(f)
-        U_current = copy(u)
-        
-        periodic_applied = false
-        homogenization_applied = false
-        
-        # Apply boundary conditions in sorted order
-        for bc in sorted_bcs
-            if bc isa BoundaryCondition
-                
-                 if bc.type == :dirichlet
-                    K_current, F_current = apply_dirichlet_problem!(K_current, F_current, bc)
-                elseif bc.type == :neumann
-                    K_current = apply_neumann_problem!(K_current, bc)
-                elseif bc.type == :periodic
-                    K_current, F_current, U_current = apply_periodic_problem!(K_current, F_current, U_current, bc)
-                    periodic_applied = true
-                end
-               
-            else  # Standard BC
-                homogenization_applied = true
-                if bc.type == :dirichlet
-                    F_current, U_current, _ = apply_dirichlet_homogenization!(bc, K_current, F_current, U_current)
-                elseif bc.type == :neumann
-                    F_current, U_current, _ = apply_neumann_homogenization!(bc, K_current, F_current, U_current)
-                elseif bc.type == :periodic
-                    K_current, F_current, U_current = apply_periodic_homogenization!(bc, K_current, F_current, U_current)
-                    periodic_applied = true
-                end
-            end
-        end
-        
-        # Solve system based on applied BC types
-        if homogenization_applied && !periodic_applied && all(iszero, u)
-            u = U_current  # Use precomputed solution
-        elseif periodic_applied
-            # Extract solution for original DOFs
-            u = U_current[1:length(u)]
-        else
-            # Solve linear system
-            u = K_current \ F_current
-        end
-
-        return u
     end
+    return global_dofs
+end
 
-# =============================================
-# Utility Functions
-# =============================================
+get_dimension(coords::Matrix) = size(coords, 2)
 
-    function _get_global_dofs(nodes::AbstractVector{Int}, dofs_per_node::Int)
-        # Get global DOFs for a set of nodes
-        return vcat([(node-1)*dofs_per_node .+ (1:dofs_per_node) for node in nodes]...)
-    end
+#  BOUNDARY CONDITION APPLICATION 
 
-    function _dimension(coords::Matrix)
-        # Return spatial dimension (1, 2, or 3)
-        return size(coords, 2)
-    end
+function apply_bc_modifier!(K_in::SparseMatrixCSC, F_in::Vector{Float64}, U_in::Vector{Float64}, bc::DirichletBC)
+    K_out, F_out = apply_dirichlet_problem!(K_in, F_in, bc)
+    return K_out, F_out, U_in
+end
 
-# =============================================
-# Standard Boundary Condition Application
-# =============================================
+function apply_bc_modifier!(K_in::SparseMatrixCSC, F_in::Vector{Float64}, U_in::Vector{Float64}, bc::PeriodicBC)
+    K_aug, F_aug, U_aug = apply_periodic_problem!(K_in, F_in, U_in, bc)
+    return K_aug, F_aug, U_aug
+end
 
-    function apply_dirichlet_problem!(K, f, bc::BoundaryCondition)
-        # Get global DOFs and values
-        global_dofs = _get_global_dofs(bc.nodes_dof, bc.dofs_per_node)
-        values = repeat(bc.macro_matrix, length(bc.nodes_dof))
+function apply_bc_modifier!(K_in::SparseMatrixCSC, F_in::Vector{Float64}, U_in::Vector{Float64}, bc::DirichletHomogenizationBC)
+    F_out, U_out, free_dofs = apply_dirichlet_homogenization!(bc, K_in, F_in, U_in)
+    return F_out, U_out, free_dofs
+end
+
+function apply_bc_modifier!(K_in::SparseMatrixCSC, F_in::Vector{Float64}, U_in::Vector{Float64}, bc::PeriodicHomogenizationBC)
+    K_aug, F_aug, U_aug = apply_periodic_homogenization!(bc, K_in, F_in, U_in)
+    return K_aug, F_aug, U_aug
+end
+
+# Periodic constraint application
+function apply_periodic_problem!(K::SparseMatrixCSC, f::Vector{Float64}, u::Vector{Float64}, bc::PeriodicBC)
+    master, slave = bc.master_nodes, bc.slave_nodes
+    n_pairs = length(master)
+    m = n_pairs * bc.dofs_per_node
+    n_dofs = size(K, 2)
+    
+    # Preallocate COO arrays
+    I_C = Vector{Int}(undef, 2*m)
+    J_C = Vector{Int}(undef, 2*m)
+    V_C = Vector{Float64}(undef, 2*m)
+    
+    idx = 1
+    @inbounds for i in 1:n_pairs
+        m_node = master[i]
+        s_node = slave[i]
+        base_m = (m_node - 1) * bc.dofs_per_node
+        base_s = (s_node - 1) * bc.dofs_per_node
         
-        # Apply DOF mask if provided
-        if bc.dof_mask !== nothing
-            full_mask = repeat(bc.dof_mask, length(bc.nodes_dof))
-            global_dofs = global_dofs[full_mask]
-            values = values[full_mask]
+        for j in 1:bc.dofs_per_node
+            # Constraint: u_m - u_s = 0
+            row = (i-1)*bc.dofs_per_node + j
+            I_C[idx] = row; J_C[idx] = base_m + j; V_C[idx] = 1.0; idx += 1
+            I_C[idx] = row; J_C[idx] = base_s + j; V_C[idx] = -1.0; idx += 1
         end
+    end
+    
+    C = sparse(view(I_C,1:idx-1), view(J_C,1:idx-1), view(V_C,1:idx-1), m, n_dofs)
+    K_aug = [K C'; C spzeros(m, m)]
+    return K_aug, [f; zeros(m)], [u; zeros(m)]
+end
+
+function apply_dirichlet_problem!(K::SparseMatrixCSC, f::Vector{Float64}, bc::DirichletBC)
+    # Get global DOFs and values
+    global_dofs = get_global_dofs(bc.nodes, bc.dofs_per_node)
+    values = repeat(bc.values, length(bc.nodes))
+    
+    # Apply mask if it exists
+    if !isempty(bc.dof_mask)
+        full_mask = repeat(bc.dof_mask, length(bc.nodes))
+        global_dofs = global_dofs[full_mask]
+        values = values[full_mask]
+    end
       
-        # Apply constraints
-        for gdof in global_dofs
-            # Zero out row and set diagonal to 1
-            for j in axes(K, 2)
-                K[gdof, j] = 0.0
-            end
-            K[gdof, gdof] = 1.0
-            
-            # Set RHS value
-            f[gdof] = values[findfirst(==(gdof), global_dofs)]
+    # Apply constraints
+    for gdof in global_dofs
+        # Zero out row and set diagonal to 1
+        for j in axes(K, 2)
+            K[gdof, j] = 0.0
         end
+        K[gdof, gdof] = 1.0
         
-        return K, f
+        # Set RHS value
+        f[gdof] = values[findfirst(==(gdof), global_dofs)]
     end
+        
+    return K, f
+end
 
-    function apply_neumann_problem!(K, bc::BoundaryCondition)
-        # Get global DOFs
-        global_dofs = _get_global_dofs(bc.nodes_dof, bc.dofs_per_node)
-        
-        # Apply DOF mask if provided
-        if bc.dof_mask !== nothing
-            full_mask = repeat(bc.dof_mask, length(bc.nodes_dof))
-            global_dofs = global_dofs[full_mask]
-        end
-        
-        # Apply constraints
-        for gdof in global_dofs
-            # Zero out row and set diagonal to 1
-            for j in axes(K, 2)
-                K[gdof, j] = 0.0
-            end
-            K[gdof, gdof] = 1.0
-        end
-        
-        return K
+function apply_dirichlet_homogenization!(bc::DirichletHomogenizationBC, K::SparseMatrixCSC, F_glob::Vector{Float64}, U_result::Vector{Float64})
+    nodes = bc.boundary_nodes
+    n_nodes = length(nodes)
+    dofs_per_node = bc.dofs_per_node
+    dim = get_dimension(bc.coords)
+    
+    # Precompute constrained DOFs
+    constrained_dofs = get_global_dofs(nodes, dofs_per_node)
+    if !isempty(bc.dof_mask)
+        mask = repeat(bc.dof_mask, n_nodes)
+        constrained_dofs = constrained_dofs[mask]
     end
-
-    function apply_periodic_problem!(K, f, u, bc::BoundaryCondition)
-        # Unpack master and slave nodes
-        master_nodes, slave_nodes = bc.nodes_dof
-        m = length(master_nodes) * bc.dofs_per_node
+    
+    # In-place updates
+    F_out = copy(F_glob)
+    U_out = copy(U_result)
+    
+    @inbounds for cdof in constrained_dofs
+        node = div(cdof - 1, dofs_per_node) + 1
+        local_dof = (cdof - 1) % dofs_per_node + 1
+        val = dot(@view(bc.macro_matrix[local_dof, 1:dim]), @view(bc.coords[node, 1:dim]))
         
-        # Build constraint matrix
-        C = spzeros(m, size(K, 2))
-        row = 1
-        for (m_node, s_node) in zip(master_nodes, slave_nodes)
-            for dof in 1:bc.dofs_per_node
-                m_dof = (m_node-1)*bc.dofs_per_node + dof
-                s_dof = (s_node-1)*bc.dofs_per_node + dof
-                
-                C[row, m_dof] = -1.0
-                C[row, s_dof] = 1.0
-                row += 1
-            end
+        U_out[cdof] = val
+        for i in eachindex(F_out)
+            F_out[i] -= K[i, cdof] * val
         end
-        
-        # Build augmented system
-        K_aug = [K  C'
-                C  spzeros(m, m)]
-        f_aug = [f; zeros(m)]
-        u_aug = [u; zeros(m)]
-        
-        return K_aug, f_aug, u_aug
     end
+    
+    # Return free DOFs as range for efficiency
+    free_dofs = setdiff(1:length(F_glob), constrained_dofs)
+    return F_out, U_out, free_dofs
+end
 
-# =============================================
-# Homogenization Boundary Condition Application
-# =============================================
-
-    function apply_dirichlet_homogenization!(bc::HomogenizationBC, K, F_glob, U_result)
-        # Get active DOFs
-        total_dofs = size(K, 1)
-        active_dofs = collect(1:total_dofs)
-        constrained_dofs = _get_global_dofs(bc.nodes_dof, bc.dofs_per_node)
-         
-        dim = _dimension(bc.coords)
-        #  # Apply DOF mask if provided
-        if bc.dof_mask !== nothing
-            full_mask = repeat(bc.dof_mask, length(bc.nodes_dof))
-          
-            constrained_dofs = constrained_dofs[full_mask]
-          
-        end
-        # Apply constraints
-        for cdof in constrained_dofs
-            # Compute constrained value from macro matrix
-            node = div(cdof - 1, bc.dofs_per_node) + 1
-            local_dof = (cdof - 1) % bc.dofs_per_node + 1
-            val = dot(bc.macro_matrix[local_dof, 1:dim], bc.coords[node, 1:dim])
-            
-            # Apply constraint
-            U_result[cdof] = val
-            F_glob .-= K[:, cdof] .* val
-        end
-        
-        # Solve for free DOFs
-        free_dofs = setdiff(active_dofs, constrained_dofs)
-        U_result[free_dofs] = K[free_dofs, free_dofs] \ F_glob[free_dofs]
-        
-        return F_glob, U_result, free_dofs
-    end
-
-    function apply_neumann_homogenization!(bc::HomogenizationBC, K, F_glob, U_result)
-        # Get global DOFs
-        global_dofs = _get_global_dofs(bc.nodes_dof, bc.dofs_per_node)
-        dim = _dimension(bc.coords)
-        macro_vals = zeros(length(global_dofs))
-        
-        # Compute macro values at nodes
-        for (i, gdof) in enumerate(global_dofs)
-            node = div(gdof - 1, bc.dofs_per_node) + 1
-            local_dof = (gdof - 1) % bc.dofs_per_node + 1
-            macro_vals[i] = dot(bc.macro_matrix[local_dof, 1:dim], bc.coords[node, 1:dim])
-        end
-        
-        # Apply to RHS
-        F_glob[global_dofs] .+= macro_vals
-        
-        return F_glob, U_result, collect(1:size(K, 1))
-    end
-
-    function apply_periodic_homogenization!(bc::HomogenizationBC, 
-        K::Union{SparseMatrixCSC{Float64,Int}, Matrix{Float64}}, 
-        F_glob::Vector{Float64}, 
-        U_result::Vector{Float64})
-
-        master_nodes, slave_nodes = bc.node_pairs
+function apply_periodic_homogenization!(bc::PeriodicHomogenizationBC, 
+                                      K::SparseMatrixCSC{Float64,Int}, 
+                                      F_glob::Vector{Float64}, 
+                                      U_result::Vector{Float64})
+    master_nodes, slave_nodes = bc.node_pairs
         dofs_per_node = bc.dofs_per_node
         Gmacro = bc.macro_matrix
         n_dofs = length(U_result)
@@ -393,52 +250,50 @@
         α = maximum(abs.(K))
         K_aug = [K α*C'; α*C spzeros(size(C,1), size(C,1))]
         F_aug = [F_glob; α*R]
-        U_aug = K_aug \ F_aug
 
-        return K_aug, F_aug, U_aug
-    end
+        return K_aug, F_aug, U_result
+end
+
+#  MAIN SOLVER FUNCTION 
+
+function solve!(
+    K::SparseMatrixCSC{Float64,Int},
+    f::Vector{Float64},
+    u::Vector{Float64},
+    bcs::AbstractVector{<:AbstractBoundaryCondition})
     
-    """
-        match_opposite_periodic_nodes(coords, tol=1e-8)
-
-        Match nodes on opposite faces for periodic boundary conditions.
-
-        # Arguments
-        - "coords": N×dim matrix of nodal coordinates
-        - "tol": Geometric tolerance for matching
-
-        # Returns
-        Vector of (master, slave) node pairs
-
-        # Algorithm
-        1. For each dimension:
-        - Find nodes on min/max faces
-        - Match nodes by closest distance in perpendicular directions
-        2. Returns all matched pairs
-
-        # Notes
-        - Essential for homogenization with periodic BCs
-        - Handles 2D and 3D geometries
-        - Ensures compatible mesh for periodic constraints
-    """
-    function match_opposite_periodic_nodes(coords::Matrix{Float64}, tol::Float64=1e-8)
-        dim = size(coords, 2)
-        pairs = Tuple{Int, Int}[]
-
-        for d in 1:dim
-            min_val = minimum(coords[:, d])
-            max_val = maximum(coords[:, d])
-
-            side_min = findall(x -> abs(x[d] - min_val) < tol, eachrow(coords))
-            side_max = findall(x -> abs(x[d] - max_val) < tol, eachrow(coords))
-
-            for i in side_min
-                ci = coords[i, setdiff(1:dim, [d])]
-                closest_j = argmin([norm(ci - coords[j, setdiff(1:dim, [d])]) for j in side_max])
-                j = side_max[closest_j]
-                push!(pairs, (i, j))
+    # Process boundary conditions
+    K_current = copy(K)
+    F_current = copy(f)
+    U_current = copy(u)
+    free_dofs = Colon()  # Default to all DOFs
+    condensed = false
+    
+    @inbounds for bc in bcs
+        if bc isa DirichletHomogenizationBC
+            F_current, U_current, free_dofs = apply_dirichlet_homogenization!(bc, K_current, F_current, U_current)
+            condensed = true
+        else
+            K_new, F_new, U_new = apply_bc_modifier!(K_current, F_current, U_current, bc)
+            if size(K_new) != size(K_current)
+                # System was augmented
+                K_current, F_current, U_current = K_new, F_new, U_new
+                condensed = false
+            else
+                K_current, F_current, U_current = K_new, F_new, U_new
             end
         end
-
-        return pairs
     end
+
+    # Solve system
+    if condensed
+        # Solve condensed system
+        K_ff = K_current[free_dofs, free_dofs]
+        F_f = F_current[free_dofs]
+        U_current[free_dofs] = K_ff \ F_f
+        return U_current
+    else
+        U_current = K_current \ F_current
+        return U_current[1:length(u)]
+    end
+end

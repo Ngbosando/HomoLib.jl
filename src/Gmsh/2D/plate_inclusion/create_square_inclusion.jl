@@ -51,8 +51,6 @@ function create_square_inclusion(x, y, size1, size2, θ,voids, to_rotate)
         rotate = [(2, surface)]                    # rotate the surface
     else
         rotate = [(1, l) for l in plate_lines]           # rotate the 4 lines
-        # —or— rotate the points instead:
-        # to_rotate = [(0, p) for p in pts]
     end
     if to_rotate
         gmsh.model.geo.rotate(rotate, x, y, 0.0, 0.0, 0.0, 1.0, θ)

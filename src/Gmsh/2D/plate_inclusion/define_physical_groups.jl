@@ -24,8 +24,8 @@
 """
 
 function define_physical_groups(
-    plate_lines, plate_surface, inclusion_surfaces, inclusion_borders, num_inclusions
-)
+    plate_lines, plate_surface, inclusion_surfaces, inclusion_borders, num_inclusions)
+    
     B_B = gmsh.model.addPhysicalGroup(1, [plate_lines[1]], 1, "Bottom1")
     B_D = gmsh.model.addPhysicalGroup(1, [plate_lines[2]], 2, "Top1")
     B_H = gmsh.model.addPhysicalGroup(1, [plate_lines[3]], 3, "Right1")

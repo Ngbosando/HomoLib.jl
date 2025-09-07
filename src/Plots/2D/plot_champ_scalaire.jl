@@ -147,6 +147,7 @@ end
 function subdivide_node(::Quad4, elements)
    return [collect(row) for row in eachrow(elements)]
 end
+
 function subdivide_node(::Quad9,elements)
     n_elements = size(elements, 1)
     subdivided = Vector{Vector{Int}}(undef, 4*n_elements)
@@ -167,15 +168,15 @@ function subdivide_node(::Quad16,elements)
     for (i, element) in enumerate(eachrow(elements))
         n = element
         offset = 9i-8
-        subdivided[offset+0] = [n[1], n[5], n[13], n[12]]  # q1
-        subdivided[offset+1] = [n[5], n[6], n[14], n[13]]  # q2
-        subdivided[offset+2] = [n[6], n[2], n[7], n[14]]   # q3
-        subdivided[offset+3] = [n[12], n[13], n[16], n[11]]# q4
-        subdivided[offset+4] = [n[13], n[14], n[15], n[16]]# q5
-        subdivided[offset+5] = [n[14], n[7], n[8], n[15]]  # q6
-        subdivided[offset+6] = [n[11], n[16], n[10], n[4]] # q7
-        subdivided[offset+7] = [n[16], n[15], n[9], n[10]] # q8
-        subdivided[offset+8] = [n[15], n[8], n[3], n[9]]   # q9
+        subdivided[offset+0] = [n[1], n[5], n[13], n[12]]  
+        subdivided[offset+1] = [n[5], n[6], n[14], n[13]]  
+        subdivided[offset+2] = [n[6], n[2], n[7], n[14]]   
+        subdivided[offset+3] = [n[12], n[13], n[16], n[11]]
+        subdivided[offset+4] = [n[13], n[14], n[15], n[16]]
+        subdivided[offset+5] = [n[14], n[7], n[8], n[15]]  
+        subdivided[offset+6] = [n[11], n[16], n[10], n[4]] 
+        subdivided[offset+7] = [n[16], n[15], n[9], n[10]] 
+        subdivided[offset+8] = [n[15], n[8], n[3], n[9]]   
     end
     return subdivided
 end
@@ -186,22 +187,22 @@ function subdivide_node(::Quad25,elements)
     for (i, element) in enumerate(eachrow(elements))
         n = element
         offset = 16i-15
-        subdivided[offset+0]  = [n[1], n[5], n[17], n[16]]   # q1
-        subdivided[offset+1]  = [n[5], n[6], n[21], n[17]]   # q2
-        subdivided[offset+2]  = [n[6], n[7], n[18], n[21]]   # q3
-        subdivided[offset+3]  = [n[7], n[2], n[8], n[18]]    # q4
-        subdivided[offset+4]  = [n[16], n[17], n[24], n[15]] # q5
-        subdivided[offset+5]  = [n[17], n[21], n[25], n[24]] # q6
-        subdivided[offset+6]  = [n[21], n[18], n[22], n[25]] # q7
-        subdivided[offset+7]  = [n[18], n[8], n[9], n[22]]   # q8
-        subdivided[offset+8]  = [n[15], n[24], n[20], n[14]] # q9
-        subdivided[offset+9]  = [n[24], n[25], n[23], n[20]] # q10
-        subdivided[offset+10] = [n[25], n[22], n[19], n[23]] # q11
-        subdivided[offset+11] = [n[22], n[9], n[10], n[19]]  # q12
-        subdivided[offset+12] = [n[14], n[20], n[13], n[4]]  # q13
-        subdivided[offset+13] = [n[20], n[23], n[12], n[13]] # q14
-        subdivided[offset+14] = [n[23], n[19], n[11], n[12]] # q15
-        subdivided[offset+15] = [n[19], n[10], n[3], n[11]]  # q16
+        subdivided[offset+0]  = [n[1], n[5], n[17], n[16]]   
+        subdivided[offset+1]  = [n[5], n[6], n[21], n[17]]   
+        subdivided[offset+2]  = [n[6], n[7], n[18], n[21]]   
+        subdivided[offset+3]  = [n[7], n[2], n[8], n[18]]    
+        subdivided[offset+4]  = [n[16], n[17], n[24], n[15]] 
+        subdivided[offset+5]  = [n[17], n[21], n[25], n[24]] 
+        subdivided[offset+6]  = [n[21], n[18], n[22], n[25]] 
+        subdivided[offset+7]  = [n[18], n[8], n[9], n[22]]   
+        subdivided[offset+8]  = [n[15], n[24], n[20], n[14]] 
+        subdivided[offset+9]  = [n[24], n[25], n[23], n[20]] 
+        subdivided[offset+10] = [n[25], n[22], n[19], n[23]] 
+        subdivided[offset+11] = [n[22], n[9], n[10], n[19]]  
+        subdivided[offset+12] = [n[14], n[20], n[13], n[4]]  
+        subdivided[offset+13] = [n[20], n[23], n[12], n[13]] 
+        subdivided[offset+14] = [n[23], n[19], n[11], n[12]] 
+        subdivided[offset+15] = [n[19], n[10], n[3], n[11]]  
     end
     return subdivided
 end
@@ -265,7 +266,6 @@ function plot_champ_scalaire(nodes, elements, field, element_type)
     # Create geometry objects
     points = [Point2f(row...) for row in eachrow(nodes)]
     
-    # Determine face type based on element type prefix
     is_tri = startswith(string(element_type), "Tri")
     face_type = is_tri ? TriangleFace : QuadFace
     faces = [face_type(element...) for element in eachrow(subdivided_elements)]
@@ -274,6 +274,27 @@ function plot_champ_scalaire(nodes, elements, field, element_type)
     mesh_obj = GeometryBasics.Mesh(points, faces)
     fig, ax, plt = mesh(mesh_obj, color = field, colormap = :jet)
     Colorbar(fig[1, 2], plt, label = "Temperature")
+    
+    return fig
+end
+
+function plot_skelleton(nodes, elements,  elemPhase , element_type)
+    subdivided_elements = subdivide_element(elements, element_type)
+    matrix_tag = findmax(countmap(elemPhase))[2]
+    
+    Ne = size(elements,1)
+    field = [elemPhase[i] == matrix_tag ? :blue : :red for i in 1:Ne]
+    # Create geometry objects
+    points = [Point2f(row...) for row in eachrow(nodes)]
+    
+    is_tri = startswith(string(element_type), "Tri")
+    face_type = is_tri ? TriangleFace : QuadFace
+    faces = [face_type(element...) for element in eachrow(subdivided_elements)]
+    
+    # Create and plot mesh
+    mesh_obj = GeometryBasics.Mesh(points, faces)
+    fig, ax, plt = mesh(mesh_obj, color = field, colormap = :jet)
+
     
     return fig
 end

@@ -2,7 +2,8 @@ using HomoLib: shape_functions
 using Test
 using LinearAlgebra
 using Dates
-
+N, ∇N = shape_functions(:Tet56, 1.0,0.5,0.5)
+N
 # Helper function to safely sum gradients and check their properties
 function validate_shape_functions(element::Symbol, coords, atol=1e-6)
     @info "Testing element: $element with $(length(coords)) sample points"
@@ -46,9 +47,9 @@ element_tests = Dict(
     :Tri21 => tri_coords(),
 
     :Quad4 => quad_coords(2),
-    # :Quad9 => quad_coords(3),
+    :Quad9 => quad_coords(3),
     :Quad16 => quad_coords(4),
-    # :Quad25 => quad_coords(5),
+    :Quad25 => quad_coords(5),
     :Quad36 => quad_coords(6),
 
     :Hex8 => hex_coords(2),
@@ -69,7 +70,9 @@ element_tests = Dict(
 
     :Pri6 => pri_coords(),
     :Pri18 => pri_coords(),
-    # :Pri36 => pri_coords()
+    :Pri36 => pri_coords(),
+    :Pri56 => pri_coords(),
+    :Pri78 => pri_coords()
     
 )
 

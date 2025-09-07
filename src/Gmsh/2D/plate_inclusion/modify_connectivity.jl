@@ -36,7 +36,7 @@ end
 function get_node_count(family, order)
     config = get_element_config(family)
     haskey(config, order) || error("Unsupported order $order for $family elements")
-    return config[order]  # Removed Pair/incomplete logic
+    return config[order] 
 end
 
 function check_element_length(elements, n_nodes)

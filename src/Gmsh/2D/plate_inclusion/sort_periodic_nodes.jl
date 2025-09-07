@@ -28,8 +28,6 @@ function sort_periodic_nodes(slave_phys_tag::Int32, master_phys_tag::Int32, dim:
     master_keys = coord_axis == :y ? [c[2] for c in master_coords] : [c[1] for c in master_coords]
     master_sorted = master_nodes[sortperm(master_keys)]  # Sort by y or x
 
-    # Optional: Reverse master order if edges are oriented oppositely
-    # Example: Left edge sorted bottom-to-top vs. right edge top-to-bottom
     if coord_axis == :y
         first_slave_y = slave_coords[argmin(slave_keys)][2]
         first_master_y = master_coords[argmin(master_keys)][2]

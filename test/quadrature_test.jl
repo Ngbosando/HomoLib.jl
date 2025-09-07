@@ -2,7 +2,7 @@ using HomoLib: integration_rule
 using Test
 
 
-function test_integration_rule_only()
+function test_integration_rule()
     @testset "Integration Rules up to 3rd order" begin
         elements = [
             :Lin2, :Lin3, :Lin4,
@@ -18,8 +18,10 @@ function test_integration_rule_only()
             for order in 1:3
                 qorder = get_quadrature_order(elem, order)
                 @testset "$elem (order $order → q$order)" begin
-                    qp, w = integration_rule(elem, qorder)
-
+                    dim = reference_dimension(elem)
+                    qp, w = integration_rule(elem, qorder,Val(dim))
+                    
+                    
                     @test length(qp) == length(w)
                     @test all(isfinite, w)
                     @test all(p -> all(isfinite, p), qp)
@@ -34,7 +36,6 @@ function test_integration_rule_only()
     end
 end
 
-# Required helpers
 function get_quadrature_order(elem::Symbol, p::Int)
     tensor_elems = (:Lin2, :Lin3, :Lin4,
                     :Quad4, :Quad9, :Quad16,
@@ -45,7 +46,7 @@ end
 
 function reference_dimension(elem::Symbol)::Int
     elem in (:Lin2, :Lin3, :Lin4) && return 1
-    elem in (:Tri3, :Tri6, :Tri10, :Tri15,
+    elem in (:Tri3, :Tri6, :Tri10, :Tri15, :Tri21, 
              :Quad4, :Quad8, :Quad9, :Quad16) && return 2
     return 3
 end
@@ -59,6 +60,7 @@ function reference_volume(shape::Symbol)::Float64
         :Tri6 => 0.5,
         :Tri10 => 0.5,
         :Tri15 => 0.5,
+        :Tri21 => 0.5,
         :Quad4 => 4.0,
         :Quad9 => 4.0,
         :Quad16 => 4.0,
@@ -76,4 +78,4 @@ function reference_volume(shape::Symbol)::Float64
 end
 
 # Run test
-test_integration_rule_only()
+test_integration_rule()

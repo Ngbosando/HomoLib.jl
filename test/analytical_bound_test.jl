@@ -23,55 +23,50 @@ function test_theoretical_bounds_plot()
     k₁, k₂ = 1.0, 5.0
 
   
-        fig = Figure(size = (800, 400))
+    fig = Figure(size = (800, 400))
 
-        ax1 = Axis(fig[1, 1], title = "Elastic bounds κ", xlabel = "Volume Fraction", ylabel = "Bulk Modulus κ")
-        ax2 = Axis(fig[1, 2], title = "Thermal bounds k", xlabel = "Volume Fraction", ylabel = "Conductivity k")
+    ax1 = Axis(fig[1, 1], title = "Elastic bounds κ", xlabel = "Volume Fraction", ylabel = "Bulk Modulus κ")
+    ax2 = Axis(fig[1, 2], title = "Thermal bounds k", xlabel = "Volume Fraction", ylabel = "Conductivity k")
 
-        κ_voigt = Float64[]
-        κ_reuss = Float64[]
-        κ_HS_low = Float64[]
-        κ_HS_up = Float64[]
-        μ_HS_low = Float64[]
-        μ_HS_up = Float64[]
+    κ_voigt = Float64[]
+    κ_reuss = Float64[]
+    κ_HS_low = Float64[]
+    κ_HS_up = Float64[]
 
-        k_voigt = Float64[]
-        k_reuss = Float64[]
-        k_HS_low = Float64[]
-        k_HS_up = Float64[]
+    k_voigt = Float64[]
+    k_reuss = Float64[]
+    k_HS_low = Float64[]
+    k_HS_up = Float64[]
 
-        for f in f_range
-            
-            push!(κ_voigt, theorical_bound(:elastic, :voigt, κ₁, μ₁, κ₂, μ₂,f).κ)
-            push!(κ_reuss, theorical_bound(:elastic, :reuss, κ₁, μ₁, κ₂, μ₂,f).κ)
-            hs = theorical_bound(:elastic, :hashin_shtrikman, κ₁, μ₁, κ₂, μ₂,f)
-            push!(κ_HS_low, hs.κ_lower)
-            push!(κ_HS_up, hs.κ_upper)
+    for f in f_range
         
+        push!(κ_voigt, theorical_bound(:elastic, :voigt, κ₁, μ₁, κ₂, μ₂,f).κ)
+        push!(κ_reuss, theorical_bound(:elastic, :reuss, κ₁, μ₁, κ₂, μ₂,f).κ)
+        hs = theorical_bound(:elastic, :hashin_shtrikman, κ₁, μ₁, κ₂, μ₂,f)
+        push!(κ_HS_low, hs.κ_lower)
+        push!(κ_HS_up, hs.κ_upper)
+    
 
-            push!(k_voigt, theorical_bound(:thermal, :voigt, k₁, k₂, f))
-            push!(k_reuss, theorical_bound(:thermal, :reuss, k₁, k₂, f))
-            htk = theorical_bound(:thermal, :hashin_shtrikman, k₁, k₂, f)
-            push!(k_HS_low, htk.k_lower)
-            push!(k_HS_up, htk.k_upper)
-        end
-
-        lines!(ax1, f_range, κ_voigt, label = "Voigt")
-        lines!(ax1, f_range, κ_reuss, label = "Reuss")
-        lines!(ax1, f_range, κ_HS_low, label = "HS Lower")
-        lines!(ax1, f_range, κ_HS_up, label = "HS Upper")
-        axislegend(ax1)
-
-        lines!(ax2, f_range, k_voigt, label = "Voigt")
-        lines!(ax2, f_range, k_reuss, label = "Reuss")
-        lines!(ax2, f_range, k_HS_low, label = "HS Lower")
-        lines!(ax2, f_range, k_HS_up, label = "HS Upper")
-        axislegend(ax2)
-        return fig
-        
+        push!(k_voigt, theorical_bound(:thermal, :voigt, k₁, k₂, f))
+        push!(k_reuss, theorical_bound(:thermal, :reuss, k₁, k₂, f))
+        htk = theorical_bound(:thermal, :hashin_shtrikman, k₁, k₂, f)
+        push!(k_HS_low, htk.k_lower)
+        push!(k_HS_up, htk.k_upper)
     end
 
+    lines!(ax1, f_range, κ_voigt, label = "Voigt")
+    lines!(ax1, f_range, κ_reuss, label = "Reuss")
+    lines!(ax1, f_range, κ_HS_low, label = "HS Lower")
+    lines!(ax1, f_range, κ_HS_up, label = "HS Upper")
+    axislegend(ax1)
 
+    lines!(ax2, f_range, k_voigt, label = "Voigt")
+    lines!(ax2, f_range, k_reuss, label = "Reuss")
+    lines!(ax2, f_range, k_HS_low, label = "HS Lower")
+    lines!(ax2, f_range, k_HS_up, label = "HS Upper")
+    axislegend(ax2)
+    return fig
+end
 
-   a = test_theoretical_bounds_plot()
+a = test_theoretical_bounds_plot()
 

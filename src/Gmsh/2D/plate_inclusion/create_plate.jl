@@ -19,8 +19,8 @@
 
 function create_plate(
     plate_width, 
-    plate_height
-)
+    plate_height)
+
     plate_points = [
         gmsh.model.geo.addPoint(0.0, 0.0, 0.0),
         gmsh.model.geo.addPoint(plate_width, 0.0, 0.0),

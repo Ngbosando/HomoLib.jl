@@ -2,16 +2,16 @@
 # Tetraheral integration rule
 # =============================================
 
-function integration_rule(::TetrahedralElement, order::Int)
+function int_rule(::TetrahedralElement, order::Int)
     @assert order ≥ 1 && order ≤ 5 "Supported integration orders: 1–5 for Tetrahedron"
 
     if order == 1
-        # 1-point rule (degree 1)
+        # 1-point rule 
         pts = [(1/4, 1/4, 1/4)]
         weights = [1.0]
 
     elseif order == 2
-        # 4-point rule (degree 2)
+        # 4-point rule 
         a = 0.5854101966249685
         b = 0.1381966011250105
         pts = [
@@ -20,10 +20,10 @@ function integration_rule(::TetrahedralElement, order::Int)
             (b, a, b),
             (b, b, a)
         ]
-        weights = fill(0.25, 4)  # Sum = 1.0
+        weights = fill(0.25, 4) 
 
     elseif order == 3
-        # 5-point rule (degree 3) - corrected weights
+        # 5-point rule (degree 3) 
         pts = [
             (1/4, 1/4, 1/4),
             (1/2, 1/6, 1/6),
@@ -31,10 +31,10 @@ function integration_rule(::TetrahedralElement, order::Int)
             (1/6, 1/6, 1/2),
             (1/6, 1/6, 1/6)
         ]
-        weights = [-4/5, 9/20, 9/20, 9/20, 9/20]  # Sum = 1.0
+        weights = [-4/5, 9/20, 9/20, 9/20, 9/20]  
 
     elseif order == 4
-        # 8-point rule (degree 4) - weights scaled to sum to 1.0
+        # 8-point rule (degree 4)
         a = 0.771642902067237
         b = 0.0761190326442543
         c = 0.315701149778202
@@ -58,7 +58,7 @@ function integration_rule(::TetrahedralElement, order::Int)
         weights = base_weights .* scale
 
     elseif order == 5
-        # 15-point rule (degree 5) - weights scaled to sum to 1.0
+        # 15-point rule (degree 5) 
         α = 1/4
         β1 = (7 - sqrt(15)) / 34
         β2 = (7 + sqrt(15)) / 34

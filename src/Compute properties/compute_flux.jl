@@ -1,397 +1,583 @@
 #-----------------------------------------------------------------
-# Main Field Recovery Function
+# Field Recovery Function
 #-----------------------------------------------------------------
-    """
-        HomoLib.recover_field_values
 
-        Module for post-processing and field recovery from finite element solutions,
-        implementing consistent field averaging techniques for accurate visualization
-        and analysis of heterogeneous materials.
+"""
+Storage for thermal field recovery results.
+"""
+struct ThermalFieldStorage{T<:AbstractFloat}
+    flux::Matrix{T}         # [num_nodes × dim] - heat flux
+    grad_temp::Matrix{T}    # [num_nodes × dim] - temperature gradient
+end
 
-        # Key Features
-        - Implements the Consistent Field Averaging (CFA) method for:
-        - Stress/strain recovery (Zienkiewicz-Zhu estimator)
-        - Flux/gradient recovery
-        - Multi-physics field coupling
-        - Supports both nodal and Gauss point field evaluation
-        - Handles composite materials with phase-wise properties
-        - Thread-parallel implementation for large-scale problems
+"""
+Storage for elastic field recovery results.
+"""
+struct ElasticFieldStorage{T<:AbstractFloat}
+    stress::Matrix{T}       # [num_nodes × nstr] - stress components
+    strain::Matrix{T}       # [num_nodes × nstr] - strain components
+end
 
-        # Field Recovery Methods
-        1. **Superconvergent Patch Recovery (SPR)**:
-        - Least-squares fitting of stresses at superconvergent points
-        - Optimal for quadratic elements (Zienkiewicz & Zhu, 1992)
+"""
+Storage for piezoelectric field recovery results.
+"""
+struct PiezoelectricFieldStorage{T<:AbstractFloat}
+    stress::Matrix{T}       # [num_nodes × nstr] - stress components
+    strain::Matrix{T}       # [num_nodes × nstr] - strain components
+    elec_disp::Matrix{T}    # [num_nodes × nelec] - electric displacement
+    elec_field::Matrix{T}   # [num_nodes × nelec] - electric field
+end
 
-        2. **Weighted Averaging**:
-        - Volume-weighted averaging of element contributions
-        - Preserves equilibrium in an integral sense
-
-        3. **Material-Specific Recovery**:
-        - Specialized handling for:
-            - Piezoelectric (electric displacement field)
-            - Poroelastic (pore pressure field)
-            - Viscoelastic (rate-dependent fields)
-
-        # Usage Example
-        ```julia
-        # Recover thermal fields
-        fields = recover_field_values(
-            elements, nodes, material, solution,
-            nothing, :Tri6, 3, 2, geom_data
-        )
-
-        # Access recovered fields:
-        heat_flux = fields.flux  # [num_nodes × dim]
-        temp_grad = fields.grad_temp  # [num_nodes × dim]
-
-        # Recover elastic fields
-        fields = recover_field_values(...)
-        stress = fields.stress  # [num_nodes × n_components]
-        strain = fields.strain  # [num_nodes × n_components]
-        Implementation Details
-
-        Nodal Averaging:
-        σᵢ = ∑ₑ∈Ωᵢ (σₑ ⋅ Vₑ) ÷ ∑ₑ∈Ωᵢ Vₑ
+"""
+Storage for poroelastic field recovery results.
+"""
+struct PoroelasticFieldStorage{T<:AbstractFloat}
+    stress::Matrix{T}       # [num_nodes × nstr] - effective stress
+    strain::Matrix{T}       # [num_nodes × nstr] - total strain
+    pressure::Vector{T}     # [num_nodes] - pore pressure
+end
 
 
-        References
-        Zienkiewicz, O.C. & Taylor, R.L. (2005). "The Finite Element Method"
+# Matrices for Field Recovery
 
-    """
-    function recover_field_values(
-        elements::Matrix{Int},
-        nodes::Union{Matrix{Float64}, Vector{Float64}},
-        material::Union{Material, Vector{Material}},
-        Uresult::NamedTuple,
-        connect_elem_phase::Union{Vector{Int}, Nothing},
-        element_type::Symbol,
-        integration_order::Int,
-        dim::Int,
-        Geometric_Data)
-        
-        # ========== Material Setup ========== #
-        is_composite = material isa Vector{Material}
-        if is_composite
-            connect_elem_phase === nothing && error("connect_elem_phase required for composite materials")
-            length(connect_elem_phase) == size(elements, 1) || error("connect_elem_phase length mismatch")
 
-            unique_phases = sort(unique(connect_elem_phase))
-            length(material) == length(unique_phases) || error("Material count mismatch with phases")
-
-            phase_to_idx = Dict(zip(unique_phases, 1:length(unique_phases)))
-
-            # Validate all materials are consistent
-            ref_dofs = get_dofs_per_node(material[1])
-            ref_B_types = material[1].B_types
-            for mat in material
-                get_dofs_per_node(mat) == ref_dofs || error("Mismatch in dofs_per_node")
-                mat.B_types == ref_B_types || error("Mismatch in B_types")
-            end
-            dofs_per_node = ref_dofs
-        else
-            dofs_per_node = get_dofs_per_node(material)
-        end
-
-        # ========== Precomputation ========== #
-        ref_mat = is_composite ? material[1] : material
-        gauss_data = Geometric_Data.gauss_data
-        jac_cache = Geometric_Data.jacobian_cache
-        B_dicts = Geometric_Data.B_dicts
-
-        # ========== Node Connectivity ========== #
-        connect_nodes_triangles, count_tri_per_node = find_elem_connected_to_nodes(elements, nodes[:,1])
-        num_nodes = size(nodes, 1)
-
-        # ========== Initialize Storage ========== #
-        store_field = init_field_storage(ref_mat, dim, num_nodes)
-        global_dofs = assemble_global_dofs(elements, ref_mat)
-        
-        # ========== Main Node Loop ========== #
-        for i in 1:num_nodes
-            nb_elem = count_tri_per_node[i]
-            connected_elements = connect_nodes_triangles[i]
-        
-            mat_ref = is_composite ? material[1] : material
-            sum_field = init_empty_field_sum(mat_ref)
-            sum_vol = 0.0
-
-            for j in 1:nb_elem
-                # Get material properties
-                elem = connected_elements[j]
-                current_mat = is_composite ? material[phase_to_idx[connect_elem_phase[elem]]] : material
-                elem_nodes = global_dofs[elem, :]
-            
-                # Get element solution
-                elem_sol = extract_element_solution_fields(current_mat,elem_nodes, Uresult)
-            
-                # Compute element contribution
-                current_type = resolve_material_type(current_mat)
-                elem_result = integrate_element_quantities(
-                    Val(current_type),
-                    current_mat,
-                    B_dicts[elem],
-                    jac_cache[elem],
-                    gauss_data,
-                    elem_sol
-                )
-                
-                accumulate_results!(sum_field, elem_result)
-                sum_vol += elem_result.volume
-            end
-        
-            final_field = finalize_field_average(sum_field, sum_vol)
-            
-            for name in propertynames(store_field)
-                target = getproperty(store_field, name)
-                source = getproperty(final_field, name)
-                
-                # Handle both vector and scalar results
-                if ndims(target) == 2
-                    target[i, :] .= vec(source)
-                else
-                    target[i] = source
-                end
-            end
-        end
+"""
+Working matrices for thermal field recovery at element level.
+"""
+mutable struct ThermalRecoveryMatrices{T<:AbstractFloat}
+    elem_sol::Vector{T}     # Element solution vector
+    flux_sum::Vector{T}     # Accumulated flux
+    grad_sum::Vector{T}     # Accumulated temperature gradient
+    volume_sum::Base.RefValue{T}
     
-        return store_field
-    end
+    # Quadrature point buffers
+    ∇T_qp::Vector{T}
+    q_qp::Vector{T}
+end
 
-#-----------------------------------------------------------------
-# Field Storage Initialization
-#-----------------------------------------------------------------
- 
-    function init_field_storage(mat::Material, dim::Int, num_nodes::Int)
-       
-        if mat.type == [:thermal]
-            (flux = zeros(num_nodes, dim), grad_temp = zeros(num_nodes, dim)) 
-        elseif mat.type == [:elastic]
-            nstr = size(mat.tensors[1], 1)  # Get from elasticity tensor
-            (stress = zeros(num_nodes, nstr), strain = zeros(num_nodes, nstr))  
-        elseif mat.type == [:elastic, :electric]
-            nstr = size(mat.tensors[1], 1)  # Rows of C tensor
-            nelec = size(mat.tensors[3], 1)  # Rows of ϵ tensor
-            (stress = zeros(num_nodes, nstr), 
-            strain = zeros(num_nodes, nstr),
-            elec_disp = zeros(num_nodes, nelec),
-            elec = zeros(num_nodes, nelec))
-        elseif mat.type == [:elastic, :pressure]
-            nstr = size(mat.tensors[1], 1)
-            (stress = zeros(num_nodes, nstr), 
-            strain = zeros(num_nodes, nstr),
-            pressure = zeros(num_nodes))
-        else
-            error("Unsupported material type: $(mat.type)")
+"""
+Working matrices for elastic field recovery at element level.
+"""
+mutable struct ElasticRecoveryMatrices{T<:AbstractFloat}
+    elem_sol::Vector{T}     # Element solution vector
+    stress_sum::Vector{T}   # Accumulated stress
+    strain_sum::Vector{T}   # Accumulated strain
+    volume_sum::Base.RefValue{T}
+    
+    # Quadrature point buffers
+    ε_qp::Vector{T}
+    σ_qp::Vector{T}
+end
+
+"""
+Working matrices for piezoelectric field recovery at element level.
+"""
+mutable struct PiezoelectricRecoveryMatrices{T<:AbstractFloat}
+    elem_sol_u::Vector{T}   # Mechanical solution
+    elem_sol_ϕ::Vector{T}   # Electric potential solution
+    stress_sum::Vector{T}   # Accumulated stress
+    strain_sum::Vector{T}   # Accumulated strain
+    elec_disp_sum::Vector{T} # Accumulated electric displacement
+    elec_field_sum::Vector{T} # Accumulated electric field
+    volume_sum::Base.RefValue{T}
+    
+    # Quadrature point buffers
+    ε_qp::Vector{T}
+    E_qp::Vector{T}
+    σ_qp::Vector{T}
+    D_qp::Vector{T}
+end
+
+"""
+Working matrices for poroelastic field recovery at element level.
+"""
+mutable struct PoroelasticRecoveryMatrices{T<:AbstractFloat}
+    elem_sol::Vector{T}     # Element solution vector
+    stress_sum::Vector{T}   # Accumulated stress
+    strain_sum::Vector{T}   # Accumulated strain
+    pressure_sum::Base.RefValue{T} # Accumulated pressure
+    volume_sum::Base.RefValue{T}
+    
+    # Quadrature point buffers
+    ε_qp::Vector{T}
+    σ_qp::Vector{T}
+end
+
+# Functions for Storage Creation
+
+
+function create_field_storage(mat::ThermalMaterial, num_nodes::Int, T::Type=Float64)
+    D = mat.dim
+    return ThermalFieldStorage{T}(
+        zeros(T, num_nodes, D),     # flux
+        zeros(T, num_nodes, D)      # grad_temp
+    )
+end
+
+function create_field_storage(mat::ElasticMaterial, num_nodes::Int, T::Type=Float64)
+    nstr = rows_voigt(mat.dim, mat.symmetry)
+    return ElasticFieldStorage{T}(
+        zeros(T, num_nodes, nstr),  # stress
+        zeros(T, num_nodes, nstr)   # strain
+    )
+end
+
+function create_field_storage(mat::PiezoelectricMaterial, num_nodes::Int, T::Type=Float64)
+    nstr = rows_voigt(mat.dim, mat.symmetry)
+    nelec = vec_rows(mat.dim, mat.symmetry)
+    return PiezoelectricFieldStorage{T}(
+        zeros(T, num_nodes, nstr),  # stress
+        zeros(T, num_nodes, nstr),  # strain
+        zeros(T, num_nodes, nelec), # elec_disp
+        zeros(T, num_nodes, nelec)  # elec_field
+    )
+end
+
+function create_field_storage(mat::PoroelasticMaterial, num_nodes::Int, T::Type=Float64)
+    nstr = rows_voigt(mat.dim, mat.symmetry)
+    return PoroelasticFieldStorage{T}(
+        zeros(T, num_nodes, nstr),  # stress
+        zeros(T, num_nodes, nstr),  # strain
+        zeros(T, num_nodes)         # pressure
+    )
+end
+
+# Working Matrix Factories
+
+function create_recovery_matrices(mat::ThermalMaterial, NN::Int, T::Type=Float64)
+    D = mat.dim
+    return ThermalRecoveryMatrices{T}(
+        zeros(T, NN),
+        zeros(T, D),
+        zeros(T, D),
+        Ref(zero(T)),
+        zeros(T, D),
+        zeros(T, D)
+    )
+end
+
+function create_recovery_matrices(mat::ElasticMaterial, NN::Int, T::Type=Float64)
+    nstr = rows_voigt(mat.dim, mat.symmetry)
+    return ElasticRecoveryMatrices{T}(
+        zeros(T, mat.dim * NN),
+        zeros(T, nstr),
+        zeros(T, nstr),
+        Ref(zero(T)),
+        zeros(T, nstr),
+        zeros(T, nstr)
+    )
+end
+
+function create_recovery_matrices(mat::PiezoelectricMaterial, NN::Int, T::Type=Float64)
+    nstr = rows_voigt(mat.dim, mat.symmetry)
+    nelec = vec_rows(mat.dim, mat.symmetry)
+    return PiezoelectricRecoveryMatrices{T}(
+        zeros(T, mat.dim * NN),
+        zeros(T, NN),
+        zeros(T, nstr),
+        zeros(T, nstr),
+        zeros(T, nelec),
+        zeros(T, nelec),
+        Ref(zero(T)),
+        zeros(T, nstr),
+        zeros(T, nelec),
+        zeros(T, nstr),
+        zeros(T, nelec)
+    )
+end
+
+function create_recovery_matrices(mat::PoroelasticMaterial, NN::Int, T::Type=Float64)
+    nstr = rows_voigt(mat.dim, mat.symmetry)
+    return PoroelasticRecoveryMatrices{T}(
+        zeros(T, mat.dim * NN),
+        zeros(T, nstr),
+        zeros(T, nstr),
+        Ref(zero(T)),
+        Ref(zero(T)),
+        zeros(T, nstr),
+        zeros(T, nstr)
+    )
+end
+
+
+# Element Field Recovery
+
+
+function recover_element_fields!(
+    recovery_matrices::ThermalRecoveryMatrices,
+    mat::ThermalMaterial,
+    B_e::BElem,
+    shp::FESD{NN,NGP,D},
+    jacs::BJacs,
+    e::Int) where {NN,NGP,D}
+    
+    fill!(recovery_matrices.flux_sum, 0.0)
+    fill!(recovery_matrices.grad_sum, 0.0)
+    recovery_matrices.volume_sum[] = 0.0
+    
+    κ = mat.κ
+    G_e = B_e.vector_gradient_operator
+    
+    @inbounds for qp in 1:NGP
+        dV = abs(jacs[qp, e][1]) * shp.weights[qp]
+        G_qp = @view G_e[:, :, qp]
+        
+        # Compute temperature gradient: ∇T = G * T_e
+        mul!(recovery_matrices.∇T_qp, G_qp, recovery_matrices.elem_sol)
+        
+        # Compute heat flux: q = -κ * ∇T
+        mul!(recovery_matrices.q_qp, κ, recovery_matrices.∇T_qp, -1.0, 0.0)
+        
+        # Accumulate weighted results
+        recovery_matrices.flux_sum .+= recovery_matrices.q_qp .* dV
+        recovery_matrices.grad_sum .+= recovery_matrices.∇T_qp .* dV
+        recovery_matrices.volume_sum[] += dV
+    end
+end
+
+function recover_element_fields!(
+    recovery_matrices::ElasticRecoveryMatrices,
+    mat::ElasticMaterial,
+    B_e::BElem,
+    shp::FESD{NN,NGP,D},
+    jacs::BJacs,
+    e::Int) where {NN,NGP,D}
+    
+    fill!(recovery_matrices.stress_sum, 0.0)
+    fill!(recovery_matrices.strain_sum, 0.0)
+    recovery_matrices.volume_sum[] = 0.0
+    
+    C = mat.C
+    B_voigt_e = B_e.voigt_gradient_operator
+    
+    @inbounds for qp in 1:NGP
+        dV = abs(jacs[qp, e][1]) * shp.weights[qp]
+        B_qp = @view B_voigt_e[:, :, qp]
+        
+        # Compute strain: ε = B * u_e
+        mul!(recovery_matrices.ε_qp, B_qp, recovery_matrices.elem_sol)
+
+        if mat.symmetry == :out_of_plane
+            recovery_matrices.ε_qp[end] += 1.0
         end
-    end
-
-    function init_empty_field_sum(mat::Material)
-     
-        if mat.type == [:thermal]
-            (flux = zeros(mat.dim),grad_temp = zeros(mat.dim))
-        elseif mat.type == [:elastic]
-            if mat.symmetry == :out_of_plane
-                s = ntens(mat.dim) + 1
+         
+        # Check for cracked material 
+        if haskey(mat.properties, :cracks)
+            E = mat.properties[:E]
+            ν = mat.properties[:ν]
+            λ = (E * ν) / ((1 + ν) * (1 - 2ν))
+            μ = E / (2(1 + ν))
+            
+            if !compare_energy(recovery_matrices.ε_qp, λ, μ; tol=1e-12)
+                # Reduce stiffness for cracked elements
+               
+                C_reduced = 1e-8 * C
+                mul!(recovery_matrices.σ_qp, C_reduced, recovery_matrices.ε_qp)
             else
-                s = ntens(mat.dim)
+                mul!(recovery_matrices.σ_qp, C, recovery_matrices.ε_qp)
             end
-            (stress = zeros(s), strain = zeros(s))
-        elseif mat.type == [:elastic, :electric]
-            nstr = size(mat.tensors[1], 1)
-            nelec = size(mat.tensors[3], 1)
-            (stress = zeros(nstr), 
-            strain = zeros(nstr),
-            elec_disp = zeros(nelec),
-            elec = zeros(nelec))
-        elseif mat.type == [:elastic, :pressure]
-            nstr = size(mat.tensors[1], 1)
-            (stress = zeros(nstr), 
-            strain = zeros(nstr),
-            pressure = 0.0)
         else
-            error("Unsupported material type: $(mat.type)")
+            # Compute stress: σ = C * ε
+            mul!(recovery_matrices.σ_qp, C, recovery_matrices.ε_qp)
         end
+        
+        # Accumulate weighted results
+        recovery_matrices.stress_sum .+= recovery_matrices.σ_qp .* dV
+        recovery_matrices.strain_sum .+= recovery_matrices.ε_qp .* dV
+        recovery_matrices.volume_sum[] += dV
     end
+end
 
-#-----------------------------------------------------------------
-# Material-Specific Field Integration
-#-----------------------------------------------------------------
-    function integrate_element_quantities(::Val{:thermal}, mat, B_dict, jac_cache, gauss_data, Uᵉ)
-        κ = mat.tensors[1]
-        B = B_dict[:temperature_gradient]
-        flux = zeros(mat.dim)
-        grad_temp = zeros(mat.dim)  # Added temperature gradient
-        volume = 0.0
+function recover_element_fields!(
+    recovery_matrices::PiezoelectricRecoveryMatrices,
+    mat::PiezoelectricMaterial,
+    B_e::BElem,
+    shp::FESD{NN,NGP,D},
+    jacs::BJacs,
+    e::Int) where {NN,NGP,D}
+    
 
-        for qp in eachindex(gauss_data.weights)
-            detJ, _ = jac_cache[qp]
-            scaling =  abs(detJ) * gauss_data.weights[qp]
-            ∇T = B[qp] * Uᵉ
-            flux .+= - (κ * ∇T) * scaling
-            grad_temp .+= ∇T * scaling  # Accumulate gradient
-            volume += scaling
+    fill!(recovery_matrices.stress_sum, 0.0)
+    fill!(recovery_matrices.strain_sum, 0.0)
+    fill!(recovery_matrices.elec_disp_sum, 0.0)
+    fill!(recovery_matrices.elec_field_sum, 0.0)
+    recovery_matrices.volume_sum[] = 0.0
+    
+    C, ε_tensor, e_tensor = mat.C, mat.ε, mat.e
+    B_voigt_e = B_e.voigt_gradient_operator
+    G_e = B_e.vector_gradient_operator
+    
+    @inbounds for qp in 1:NGP
+        dV = abs(jacs[qp, e][1]) * shp.weights[qp]
+        B_qp = @view B_voigt_e[:, :, qp]
+        G_qp = @view G_e[:, :, qp]
+        
+        # Compute strain: ε = B * u_e
+        mul!(recovery_matrices.ε_qp, B_qp, recovery_matrices.elem_sol_u)
+        
+        # Compute electric field: E = G * φ_e
+        mul!(recovery_matrices.E_qp, G_qp, recovery_matrices.elem_sol_ϕ, 1.0, 0.0)
+        
+        # Compute stress: σ = C*ε - e^T*E
+        mul!(recovery_matrices.σ_qp, C, recovery_matrices.ε_qp)
+        mul!(recovery_matrices.σ_qp, transpose(e_tensor), recovery_matrices.E_qp, -1.0, 1.0)
+        
+        # Compute electric displacement: D = e*ε + ε*E
+        mul!(recovery_matrices.D_qp, e_tensor, recovery_matrices.ε_qp)
+        mul!(recovery_matrices.D_qp, ε_tensor, recovery_matrices.E_qp, 1.0, 1.0)
+        
+        # Accumulate weighted results
+        recovery_matrices.stress_sum .+= recovery_matrices.σ_qp .* dV
+        recovery_matrices.strain_sum .+= recovery_matrices.ε_qp .* dV
+        recovery_matrices.elec_disp_sum .+= recovery_matrices.D_qp .* dV
+        recovery_matrices.elec_field_sum .+= recovery_matrices.E_qp .* dV
+        recovery_matrices.volume_sum[] += dV
+    end
+end
+
+function recover_element_fields!(
+    recovery_matrices::PoroelasticRecoveryMatrices,
+    mat::PoroelasticMaterial,
+    B_e::BElem,
+    shp::FESD{NN,NGP,D},
+    jacs::BJacs,
+    e::Int) where {NN,NGP,D}
+    
+    fill!(recovery_matrices.stress_sum, 0.0)
+    fill!(recovery_matrices.strain_sum, 0.0)
+    recovery_matrices.pressure_sum[] = 0.0
+    recovery_matrices.volume_sum[] = 0.0
+    
+    C = mat.C
+    B_voigt_e = B_e.voigt_gradient_operator
+    
+    @inbounds for qp in 1:NGP
+        dV = abs(jacs[qp, e][1]) * shp.weights[qp]
+        B_qp = @view B_voigt_e[:, :, qp]
+        N = shp.N[qp]
+        
+        # Compute strain: ε = B * u_e
+        mul!(recovery_matrices.ε_qp, B_qp, recovery_matrices.elem_sol)
+        
+        # Compute stress: σ = C * ε
+        mul!(recovery_matrices.σ_qp, C, recovery_matrices.ε_qp)
+        
+        # Compute pressure at quadrature point 
+        pressure_qp = 0.0
+        for a in 1:NN
+            node_idx = (a-1)*get_dofs_per_node(mat) + mat.dim + 1
+            if node_idx <= length(recovery_matrices.elem_sol)
+                pressure_qp += N[a] * recovery_matrices.elem_sol[node_idx] #dont work need to correct it 
+            end
         end
-        (flux = flux, grad_temp = grad_temp, volume = volume)
+        
+        # Accumulate weighted results
+        recovery_matrices.stress_sum .+= recovery_matrices.σ_qp .* dV
+        recovery_matrices.strain_sum .+= recovery_matrices.ε_qp .* dV
+        recovery_matrices.pressure_sum[] += pressure_qp * dV
+        recovery_matrices.volume_sum[] += dV
     end
+end
 
-    function integrate_element_quantities(::Val{:elastic}, mat, B_dict, jac_cache, gauss_data, Uᵉ)
-        C = mat.tensors[1]
-        B = B_dict[:strain]
-        stress = zeros(size(B[1], 1))
-        strain = zeros(size(B[1], 1))
-        volume = 0.0
+# Solution Extraction
+
+function extract_element_solution!(
+    recovery_matrices::Union{ThermalRecoveryMatrices, ElasticRecoveryMatrices, PoroelasticRecoveryMatrices},
+    Uresult::NamedTuple,
+    elem_dofs::AbstractVector{Int})
+    
+    if hasfield(typeof(Uresult), :T)
+        recovery_matrices.elem_sol .= Uresult.T[elem_dofs]
+    else
+        recovery_matrices.elem_sol .= Uresult.U[elem_dofs]
+    end
+end
+
+function extract_element_solution!(
+    recovery_matrices::PiezoelectricRecoveryMatrices,
+    Uresult::NamedTuple,
+    elem_dofs_u::AbstractVector{Int},
+    elem_dofs_ϕ::AbstractVector{Int})
+    
+    recovery_matrices.elem_sol_u .= Uresult.U[elem_dofs_u]
+    recovery_matrices.elem_sol_ϕ .= Uresult.ϕ[elem_dofs_ϕ]
+end
+
+# Main Recovery Function
+
+function recover_field_values(
+    materials::Vector{M},
+    connectivity::Matrix{Int},
+    nodes::Matrix{Float64},
+    Uresult::NamedTuple,
+    connect_elem_phase::Vector{Int},
+    geom::GeometricData) where {M<:AbstractMaterial}
+    
+    Ne, NN = size(connectivity)
+    num_nodes = size(nodes, 1)
+    nthreads = Threads.nthreads()
+    
+    # Phase handling
+    unique_phases = sort(unique(connect_elem_phase))
+    phase_to_material_idx = Dict{Int, Int}(phase => i for (i, phase) in enumerate(unique_phases))
+    material_indices_per_element = [phase_to_material_idx[p] for p in connect_elem_phase]
+    
+    # Create storage
+    field_storage = create_field_storage(materials[1], num_nodes)
+    
+    # Thread-local working matrices
+    recovery_matrices_per_thread = [[create_recovery_matrices(m, NN) for m in materials] for _ in 1:nthreads]
+    
+    # Node connectivity
+    connect_nodes_elements, count_elem_per_node = find_elem_connected_to_nodes(connectivity, nodes[:,1])
+    
+    # DOF handling
+    dofs_per_node = get_dofs_per_node(materials[1])
+    dofs_buf_per_thread = [Vector{Int}(undef, NN * dofs_per_node) for _ in 1:nthreads]
+    
+    # For piezoelectric materials, need separate DOF buffers
+    if M <: PiezoelectricMaterial
+        mech_dofs_buf_per_thread = [Vector{Int}(undef, materials[1].dim * NN) for _ in 1:nthreads]
+        elec_dofs_buf_per_thread = [Vector{Int}(undef, NN) for _ in 1:nthreads]
+    end
+    
+    # Main node loop
+    @inbounds Threads.@threads for i in 1:num_nodes
+        tid = Threads.threadid()
+        nb_elem = count_elem_per_node[i]
+        connected_elements = connect_nodes_elements[i]
         
-        for qp in eachindex(gauss_data.weights)
-            detJ, _ = jac_cache[qp]
-            scaling = abs(detJ) * gauss_data.weights[qp]
-            ε = B[qp] * Uᵉ
-            σ = C * ε
-        
-            stress .+= σ * scaling
-            strain .+= ε * scaling
-            volume += scaling
+        # Initialize accumulators for this node
+        if M <: ThermalMaterial
+            flux_acc = zeros(materials[1].dim)
+            grad_acc = zeros(materials[1].dim)
+        elseif M <: ElasticMaterial
+            nstr = rows_voigt(materials[1].dim, materials[1].symmetry)
+            stress_acc = zeros(nstr)
+            strain_acc = zeros(nstr)
+        elseif M <: PiezoelectricMaterial
+            nstr = rows_voigt(materials[1].dim, materials[1].symmetry)
+            nelec = vec_rows(materials[1].dim, materials[1].symmetry)
+            stress_acc = zeros(nstr)
+            strain_acc = zeros(nstr)
+            elec_disp_acc = zeros(nelec)
+            elec_field_acc = zeros(nelec)
+        elseif M <: PoroelasticMaterial
+            nstr = rows_voigt(materials[1].dim, materials[1].symmetry)
+            stress_acc = zeros(nstr)
+            strain_acc = zeros(nstr)
+            pressure_acc = 0.0
         end
-        (stress = stress, strain = strain, volume = volume)
-    end
-
-    function integrate_element_quantities(::Val{:piezoelectric}, mat, B_dict, jac_cache, gauss_data, Uᵉ)
-        C, ϵ, e = mat.tensors
-        B_u = B_dict[:strain]
-        B_ϕ = B_dict[:electric_field]
         
-        nstr = size(C, 1)
-        nelec = size(ϵ, 1)
+        total_volume = 0.0
         
-        elem_stress = zeros(nstr)
-        elem_strain = zeros(nstr)
-        elem_elec_disp = zeros(nelec)
-        elem_elec = zeros(nelec)
-        volume = 0.0
-
-        for qp in eachindex(gauss_data.weights)
-            detJ, _ = jac_cache[qp]
+        for j in 1:nb_elem
+            elem = connected_elements[j]
+            mat_idx = material_indices_per_element[elem]
+            mat = materials[mat_idx]
+            recovery_matrices = recovery_matrices_per_thread[tid][mat_idx]
+            
+            conn_e = @view connectivity[elem, :]
+            
+            if M <: PiezoelectricMaterial
+                # Handle piezoelectric DOFs
+                local_mech_dofs!(mech_dofs_buf_per_thread[tid], conn_e, dofs_per_node, mat.dim)
+                local_scal_dofs!(elec_dofs_buf_per_thread[tid], conn_e, dofs_per_node, mat.dim, 1)
+                extract_element_solution!(recovery_matrices, Uresult, 
+                                        mech_dofs_buf_per_thread[tid], elec_dofs_buf_per_thread[tid])
+            else
+                # Handle single-field materials
+                dofs_buf = dofs_buf_per_thread[tid]
+                for a in 1:NN
+                    base = (conn_e[a] - 1) * dofs_per_node
+                    cols = (a-1)*dofs_per_node+1 : a*dofs_per_node
+                    dofs_buf[cols] .= base .+ (1:dofs_per_node)
+                end
+                extract_element_solution!(recovery_matrices, Uresult, dofs_buf)
+            end
            
-            scale = abs(detJ) * gauss_data.weights[qp]
             
-            # Compute strain and electric field
-          
-            ε = B_u[qp] * Uᵉ.mech
-            E = B_ϕ[qp] * Uᵉ.potential  # Electric field is negative gradient
-        
-            # Compute stress and electric displacement
-            σ = C * ε - transpose(e) * E
-            D = e * ε + ϵ * E
-            
-            # Accumulate all fields
-            elem_strain .+= ε * scale
-            elem_elec .+= E * scale
-            elem_stress .+= σ * scale
-            elem_elec_disp .+= D * scale
-            volume += scale
-        end
-        
-        (stress = elem_stress, 
-        strain = elem_strain,
-        elec_disp = elem_elec_disp,
-        elec = elem_elec,
-        volume = volume)
-    end
-
-    function integrate_element_quantities(::Val{:poroelastic}, mat, B_dict, jac_cache, gauss_data, Uᵉ)
-       C = mat.tensors[1]
-        B = B_dict[:strain]
-        stress = zeros(size(B[1], 1))
-        strain = zeros(size(B[1], 1))
-        volume = 0.0
-        
-        for qp in eachindex(gauss_data.weights)
-            detJ, _ = jac_cache[qp]
-            scaling = abs(detJ) * gauss_data.weights[qp]
-            ε = B[qp] * Uᵉ
-            σ = C * ε
-        
-            stress .+= σ * scaling
-            strain .+= ε * scaling
-            volume += scaling
-        end
-        (stress = stress, strain = strain, volume = volume)
-    end
-
-    function integrate_element_quantities(::Val{:viscoelastic}, mat, B_dict, jac_cache, gauss_data, Uᵉ)
-        C, η = mat.tensors  # Elasticity and viscosity tensors
-        B = B_dict[:strain]
-        
-        elem_stress = zero(C)
-        volume = 0.0
-
-        for qp in eachindex(gauss_data.weights)
-            detJ, _ = jac_cache[e][qp]
-            scale = abs(detJ) * gauss_data.weights[qp]
-            
-            ε = B[qp] * Uᵉ.mech
-            ε̇ = B[qp] * Uᵉ.mech_rate  # Assuming rate field exists
-            
-            σ = C * ε + η * ε̇
-            elem_stress += σ * scale
-            volume += scale
-        end
-        
-        (stress = elem_stress, volume = volume)
-    end
-
-#-----------------------------------------------------------------
-# DOF Handling Utilities
-#-----------------------------------------------------------------
-
-    function extract_element_solution_fields(mat::Material, elem_nodes, Uresult::NamedTuple)
-        mat_type = resolve_material_type(mat)
-        if mat_type == :thermal
-            return Uresult.T[elem_nodes]
-        elseif mat_type == :elastic
-            return Uresult.U[elem_nodes]
-        elseif mat_type == :piezoelectric
-            block = mat.dim + 1
-            elem_nodes_u = [elem_nodes[i] for i in eachindex(elem_nodes) if (i-1) % block <  mat.dim]
-            elem_nodes_ϕ = [elem_nodes[i] for i in eachindex(elem_nodes) if (i-1) % block == mat.dim]
-   
-            return (
-                mech = Uresult.U[elem_nodes_u],
-                potential = Uresult.ϕ[elem_nodes_ϕ]
+            # Recover fields for this element
+            recover_element_fields!(
+                recovery_matrices, mat, geom.differential_operator_matrices[elem],
+                geom.shape_function_data, geom.jacobian_transformation_data, elem
             )
-        elseif mat_type == :thermoelastic
-            return (
-                mech = Uresult.U[elem_nodes],
-                temp = Uresult.T[elem_nodes]
-            )
-        elseif mat_type == :poroelastic
-            return (
-                mech = Uresult.U[elem_nodes]
-            )
-        else
-            error("Unsupported material type: $(mat.type)")
-        end
-    end
-
-
-#-----------------------------------------------------------------
-# Connectivity and Finalization
-#-----------------------------------------------------------------
-    function find_elem_connected_to_nodes(elements, Nₓ)
-        num_nodes = length(Nₓ)
-        num_elems = size(elements, 1)
-        elements_nodes_elements = [Int[] for _ in 1:num_nodes]
-
-        for elem in 1:num_elems
-            for node in elements[elem, :]
-                push!(elements_nodes_elements[node], elem)
+            
+            # Accumulate results
+            vol = recovery_matrices.volume_sum[]
+            if vol > 0
+                if M <: ThermalMaterial
+                    flux_acc .+= recovery_matrices.flux_sum
+                    grad_acc .+= recovery_matrices.grad_sum
+                elseif M <: ElasticMaterial
+                    stress_acc .+= recovery_matrices.stress_sum
+                    strain_acc .+= recovery_matrices.strain_sum
+                elseif M <: PiezoelectricMaterial
+                    stress_acc .+= recovery_matrices.stress_sum
+                    strain_acc .+= recovery_matrices.strain_sum
+                    elec_disp_acc .+= recovery_matrices.elec_disp_sum
+                    elec_field_acc .+= recovery_matrices.elec_field_sum
+                elseif M <: PoroelasticMaterial
+                    stress_acc .+= recovery_matrices.stress_sum
+                    strain_acc .+= recovery_matrices.strain_sum
+                    pressure_acc += recovery_matrices.pressure_sum[]
+                end
+                total_volume += vol
             end
         end
+        
+        # Finalize results for this node
+        if total_volume > 0
+            if M <: ThermalMaterial
+                field_storage.flux[i, :] .= flux_acc ./ total_volume
+                field_storage.grad_temp[i, :] .= grad_acc ./ total_volume
+            elseif M <: ElasticMaterial
+                field_storage.stress[i, :] .= stress_acc ./ total_volume
+                field_storage.strain[i, :] .= strain_acc ./ total_volume
+            elseif M <: PiezoelectricMaterial
+                field_storage.stress[i, :] .= stress_acc ./ total_volume
+                field_storage.strain[i, :] .= strain_acc ./ total_volume
+                field_storage.elec_disp[i, :] .= elec_disp_acc ./ total_volume
+                field_storage.elec_field[i, :] .= elec_field_acc ./ total_volume
+            elseif M <: PoroelasticMaterial
+                field_storage.stress[i, :] .= stress_acc ./ total_volume
+                field_storage.strain[i, :] .= strain_acc ./ total_volume
+                field_storage.pressure[i] = pressure_acc / total_volume
+            end
+        end
+    end
+    
+    return field_storage
+end
 
-        count_elem_per_node = [length(elems) for elems in elements_nodes_elements]
-        return elements_nodes_elements, count_elem_per_node
+# Single material 
+function recover_field_values(
+    material::M,
+    connectivity::Matrix{Int},
+    nodes::Matrix{Float64},
+    Uresult::NamedTuple,
+    geom::GeometricData) where {M<:AbstractMaterial}
+    
+    Ne = size(connectivity, 1)
+    connect_elem_phase = ones(Int, Ne)
+    return recover_field_values([material], connectivity, nodes, Uresult, connect_elem_phase, geom)
+end
+
+
+# Utility Functions 
+
+function find_elem_connected_to_nodes(connectivity::Matrix{Int}, node_coords::Vector{Float64})
+    num_nodes = length(node_coords)
+    num_elems = size(connectivity, 1)
+    elements_nodes_elements = [Int[] for _ in 1:num_nodes]
+
+    for elem in 1:num_elems
+        for node in connectivity[elem, :]
+            push!(elements_nodes_elements[node], elem)
+        end
     end
 
-    function finalize_field_average(sum_field::NamedTuple, total_volume::Real)
-        total_volume == 0.0 && error("Cannot finalize: total volume is zero")
-        return map(x -> x ./ total_volume, sum_field)
-    end
+    count_elem_per_node = [length(elems) for elems in elements_nodes_elements]
+    return elements_nodes_elements, count_elem_per_node
+end
+

@@ -1,490 +1,348 @@
-# =============================================
-# Material Definitions Core
-# =============================================
+# =================
+# Material system 
+# =================
 
-# ----------------------
-# Material Display
-# ----------------------
-function Base.show(io::IO, mat::Material)
-    println(io, "Material physics: ", join(mat.type, " + "))
-    println(io, "Dimension: ", mat.dim, "D")
-    println(io, "Symmetry: ", mat.symmetry)
+const TYPE_ELASTIC   = [:elastic]
+const TYPE_THERMAL   = [:thermal]
+const TYPE_PIEZO     = [:elastic, :electric]
+const TYPE_PORO      = [:elastic, :pressure]
+const TYPE_STOKES    = [:fluid, :pressure]
 
-    println(io, "Properties:")
-    for (k, v) in mat.properties
-        println(io, "  $k = $v")
+const BT_ELASTIC     = [:strain]
+const BT_THERMAL     = [:temperature_gradient]
+const BT_ELECTRIC    = [:electric_field]
+const BT_PIEZO       = [:strain, :electric_field]
+const BT_STOKES      = [:velocity_gradient, :pressure]
+
+const EMPTY_PROPS = Dict{Symbol,Any}()  
+
+"""
+    ElasticMaterial(dim; symmetry=:isotropic, C=nothing, E=nothing, ν=nothing, ρ=0.0, stress=false, out_of_plane=false)
+
+Elastic material.
+- If "C" is provided (Voigt), it is used as is.
+- Otherwise "E, ν" are used to build "C" with:
+  - "stress=true" → plane stress
+  - "stress=false" → plane strain - default
+  - "out_of_plane=true" → 4×4 matrix with ε33
+"""
+struct ElasticMaterial{TC<:AbstractMatrix{<:Real}} <: AbstractMaterial
+    dim::Int
+    symmetry::Symbol
+    C::TC
+    ρ::Float64
+    props::Dict{Symbol,Any}  
+end
+
+"""
+    ThermalMaterial(dim; symmetry=:isotropic, κ=nothing, k=nothing, ρ=0.0, c=0.0)
+
+Thermal material.
+- If "κ" is provided (tensor), it is used as is.
+- Otherwise "k" (isotropic scalar) is used to build "κ = k*I".
+"""
+struct ThermalMaterial{Tκ<:AbstractMatrix{<:Real}} <: AbstractMaterial
+    dim::Int
+    symmetry::Symbol
+    κ::Tκ
+    ρ::Float64
+    c::Float64
+    props::Dict{Symbol,Any}
+end
+
+"""
+    PiezoelectricMaterial(dim; symmetry=:isotropic, C, ε, e, ρ=0.0, stress=false, out_of_plane=false)
+
+Piezoelectric material.
+- "C": elasticity tensor (Voigt)
+- "ε": permittivity (dim×dim)
+- "e": piezoelectric tensor (dim×nstr)
+- "stress", "out_of_plane": same logic as ElasticMaterial if C built from E,ν
+"""
+struct PiezoelectricMaterial{TC<:AbstractMatrix{<:Real},Tε<:AbstractMatrix{<:Real},Te<:AbstractMatrix{<:Real}} <: AbstractMaterial
+    dim::Int
+    symmetry::Symbol
+    C::TC
+    ε::Tε
+    e::Te
+    ρ::Float64
+    props::Dict{Symbol,Any}
+end
+
+"""
+    PoroelasticMaterial(dim; symmetry=:isotropic, C=nothing, E=nothing, ν=nothing, α_p, M=nothing, ρs=0.0, ρf=0.0, stress=false, out_of_plane=false)
+
+Poroelastic material (Biot).
+- "C" or ("E","ν") for the matrix.
+- "α_p": Biot coefficient (required)
+- "M" (optional): storage modulus
+- "stress", "out_of_plane": same logic as ElasticMaterial
+"""
+struct PoroelasticMaterial{TC<:AbstractMatrix{<:Real}} <: AbstractMaterial
+    dim::Int
+    symmetry::Symbol
+    C::TC
+    α_p::Union{Nothing,Float64}
+    M::Union{Nothing,Float64}
+    ρs::Float64
+    ρf::Float64
+    props::Dict{Symbol,Any}
+end
+
+"""
+    StokesMaterial(dim; μ, ρ=1.0)
+
+Fluid (Stokes): viscosity "μ", density "ρ".
+"""
+struct StokesMaterial <: AbstractMaterial
+    dim::Int
+    symmetry::Symbol
+    μ::Float64
+    ρ::Float64
+    props::Dict{Symbol,Any}
+end
+
+voigt_nstr(dim::Int, out_of_plane::Bool=false) = begin
+    if dim == 1
+        return 1
+    elseif dim == 2
+        return out_of_plane ? 4 : 3
+    elseif dim == 3
+        return 6
+    else
+        error("Unsupported dim=$dim")
+    end
+end
+
+function C_iso(dim::Int, symmetry::Symbol, E::Real, ν::Real, stress::Bool=false, out_of_plane::Bool=false)
+    if dim == 1
+        return reshape([E], 1, 1)
+        
+    elseif dim == 2
+        if symmetry == :out_of_plane
+            if stress
+                E_mod = E / (1 - ν^2)
+                C = zeros(4, 4)
+                C[1,1] = 1; C[2,2] = 1
+                C[1,2] = ν; C[2,1] = ν
+                C[3,3] = (1 - ν) / 2
+            
+                C[1,4] = ν ; C[4,1] = ν 
+                C[2,4] = ν ; C[4,2] = ν 
+                C[4,4] = 1
+                return E_mod * C
+            else
+                G = G = E /  ((1 + ν) * (1 - 2ν))
+                C = [1 - ν ν 0 ν;
+                            ν 1 - ν 0 ν;
+                            0 0 (1 - 2ν) / 2 0;
+                            ν ν 0 1 - ν]
+                return G * C
+            end
+        else
+            if stress
+                E_mod = E / (1 - ν^2)
+                return E_mod * [1.0 ν 0.0;
+                                ν 1.0 0.0;
+                                0.0 0.0 (1 - ν)/2]
+            else
+                G = E / ((1 + ν) * (1 - 2ν))
+                return G * [1-ν ν 0.0;
+                                ν 1-ν 0.0;
+                                0.0 0.0 (1 - 2ν)/2]
+            end
+        end
+        
+    elseif dim == 3
+        λ = E * ν / ((1 + ν) * (1 - 2ν))
+        G = E / (2 * (1 + ν))
+        return [λ+2G λ     λ     0  0  0;
+                λ     λ+2G λ     0  0  0;
+                λ     λ     λ+2G 0  0  0;
+                0     0     0     G  0  0;
+                0     0     0     0  G  0;
+                0     0     0     0  0  G]
+    else
+        error("Unsupported dim=$dim")
+    end
+end
+
+function k_iso(dim::Int, k::Real)
+    K = zeros(dim,dim)
+    @inbounds for i in 1:dim
+        K[i,i] = k
+    end
+    return K
+end
+
+function ElasticMaterial(dim::Int; symmetry::Symbol=:isotropic, C=nothing, E=nothing, ν=nothing, ρ::Real=0.0, stress::Bool=false, out_of_plane::Bool=false)
+    C_built, props = build_C_with_props(dim, symmetry, C, E, ν, stress, out_of_plane)
+    ElasticMaterial(dim, symmetry, C_built, Float64(ρ), props)
+end
+
+function build_C_with_props(dim, symmetry, C, E, ν, stress, out_of_plane)
+    props = Dict{Symbol,Any}()
+    
+    if dim == 2
+        props[:stress] = stress
+        props[:out_of_plane] = out_of_plane
     end
 
-    if !isnothing(mat.mass_properties)
-        println(io, "Mass Properties:")
-        for (k, v) in mat.mass_properties
+    if C !== nothing
+        C_built = Matrix{Float64}(C)
+        if E !== nothing; props[:E] = E; end
+        if ν !== nothing; props[:ν] = ν; end
+    elseif (E !== nothing) && (ν !== nothing)
+        props[:E] = E
+        props[:ν] = ν
+        C_built = C_iso(dim, symmetry, Float64(E), Float64(ν), stress, out_of_plane)
+    else
+        error("Provide either C or (E, ν) for ElasticMaterial")
+    end
+    
+    return C_built, props
+end
+
+ThermalMaterial(dim::Int; symmetry::Symbol=:isotropic, κ=nothing, k=nothing, ρ::Real=0.0, c::Real=0.0) =
+    ThermalMaterial(dim, symmetry, build_κ(dim, κ, k), Float64(ρ), Float64(c), Dict{Symbol,Any}())
+
+function build_κ(dim, κ, k)
+    if κ !== nothing
+        return Matrix{Float64}(κ)
+    elseif k !== nothing
+        return k_iso(dim, Float64(k))
+    else
+        error("Provide κ or k for ThermalMaterial")
+    end
+end
+
+function PiezoelectricMaterial(dim::Int; symmetry::Symbol=:isotropic, C, ε, e, ρ::Real=0.0, stress::Bool=false, out_of_plane::Bool=false)
+    props = Dict{Symbol,Any}()
+    if dim == 2
+        props[:stress] = stress
+        props[:out_of_plane] = out_of_plane
+    end
+    PiezoelectricMaterial(dim, symmetry, Matrix{Float64}(C), Matrix{Float64}(ε), Matrix{Float64}(e), Float64(ρ), props)
+end
+
+function PoroelasticMaterial(dim::Int; symmetry::Symbol=:isotropic, C=nothing, E=nothing, ν=nothing,
+                    α_p::Union{Nothing,Real}=nothing, M::Union{Nothing,Real}=nothing, ρs::Real=0.0, ρf::Real=0.0, stress::Bool=false, out_of_plane::Bool=false)
+    C_built, props = build_C_with_props(dim, symmetry, C, E, ν, stress, out_of_plane)
+    α_p !== nothing ? props[:α_p] = Float64(α_p) : nothing
+    PoroelasticMaterial(dim, symmetry, C_built, α_p === nothing ? 0.0 : Float64(α_p),
+                        M === nothing ? nothing : Float64(M), Float64(ρs), Float64(ρf), props)
+end
+
+StokesMaterial(dim::Int; symmetry::Symbol=:isotropic, μ::Real, ρ::Real=1.0) =
+    StokesMaterial(dim, symmetry, Float64(μ), Float64(ρ), Dict{Symbol,Any}())
+
+tensors_tuple(m::ElasticMaterial)      = (m.C,)
+tensors_tuple(m::ThermalMaterial)      = (m.κ,)
+tensors_tuple(m::PiezoelectricMaterial)= (m.C, m.ε, m.e)
+tensors_tuple(m::PoroelasticMaterial)  = (m.C,)
+tensors_tuple(m::StokesMaterial)       = ()
+
+type_vec(::ElasticMaterial)       = TYPE_ELASTIC
+type_vec(::ThermalMaterial)       = TYPE_THERMAL
+type_vec(::PiezoelectricMaterial) = TYPE_PIEZO
+type_vec(::PoroelasticMaterial)   = TYPE_PORO
+type_vec(::StokesMaterial)        = TYPE_STOKES
+
+B_types_vec(::ElasticMaterial)       = BT_ELASTIC
+B_types_vec(::ThermalMaterial)       = BT_THERMAL
+B_types_vec(::PiezoelectricMaterial) = BT_PIEZO
+B_types_vec(::PoroelasticMaterial)   = BT_ELASTIC
+B_types_vec(::StokesMaterial)        = BT_STOKES
+
+massprops(m::ElasticMaterial)       = Dict{Symbol,Float64}(:ρ=>m.ρ)
+massprops(m::ThermalMaterial)       = Dict{Symbol,Float64}(:ρ=>m.ρ, :c=>m.c)
+massprops(m::PiezoelectricMaterial) = Dict{Symbol,Float64}(:ρ=>m.ρ)
+massprops(m::PoroelasticMaterial)   = Dict{Symbol,Float64}(:ρs=>m.ρs, :ρf=>m.ρf, :α_p=>m.α_p)
+massprops(m::StokesMaterial)        = Dict{Symbol,Float64}(:ρ=>m.ρ)
+
+function Base.getproperty(m::AbstractMaterial, s::Symbol)
+    if      s === :tensors       ; return tensors_tuple(m)
+    elseif  s === :type         ; return type_vec(m)
+    elseif  s === :B_types      ; return B_types_vec(m)
+    elseif  s === :properties   ; return getfield(m, :props)
+    elseif  s === :mass_properties
+        props = getfield(m, :props)
+        if !haskey(props, :massprops)
+            props[:massprops] = massprops(m)
+        end
+        return props[:massprops]
+    else
+        props = getfield(m, :props)
+        if haskey(props, s)
+            return props[s]
+        end
+        
+        return getfield(m, s)
+    end
+end
+
+"""
+    get_dofs_per_node(mat)
+
+Number of DOFs per node based on physics.
+"""
+get_dofs_per_node(m::ElasticMaterial)        = m.dim
+get_dofs_per_node(m::ThermalMaterial)        = 1
+get_dofs_per_node(m::PiezoelectricMaterial)  = m.dim + 1
+get_dofs_per_node(m::PoroelasticMaterial)    = m.dim
+get_dofs_per_node(m::StokesMaterial)         = m.dim + 1
+
+"""
+    get_nstr(mat)
+Number of strain components according to matrix C.
+"""
+get_nstr(m::AbstractMaterial) = hasfield(typeof(m), :C) ? size(m.C, 1) : (m.dim == 3 ? 6 : (m.dim == 2 ? 3 : 1))
+
+function Base.show(io::IO, m::AbstractMaterial)
+    phys = join(getproperty(m, :type), " + ")
+    println(io, "Material physics: ", phys)
+    println(io, "Dimension: ", m.dim, "D")
+    println(io, "Symmetry: ", m.symmetry)
+
+    if m.dim == 2
+        props = getproperty(m, :properties)
+        if get(props, :stress, false)
+            if get(props, :out_of_plane, false)
+                println(io, "Formulation: out-of-plane plane stress")
+            else
+                println(io, "Formulation: plane stress (σ₃₃=0)")
+            end
+        else
+            if get(props, :out_of_plane, false)
+                println(io, "Formulation: out-of-plane plane strain")
+            else
+                println(io, "Formulation: plane strain (ε₃₃=0)")
+            end
+        end
+    end
+
+    props = getproperty(m, :properties)
+    if !isempty(props)
+        println(io, "Properties:")
+        for (k,v) in props
+            k === :massprops && continue
             println(io, "  $k = $v")
         end
     end
 
-    println(io, "Tensors:")
-    for (i, T) in enumerate(mat.tensors)
-        println(io, "  Tensor[$i]: size = ", size(T))
-        show(IOContext(io, :limit => true), "text/plain", T)
-        println(io)
-    end
-
-    println(io, "Conjugate fields: ", mat.B_types)
-end
-
-# ----------------------
-# Constants
-# ----------------------
-const ALLOWED_SYMMETRIES = (
-    :isotropic, :orthotropic, :anisotropic, :transversely_isotropic, :out_of_plane
-)
-
-const PHYSICS_TENSORS = Dict(
-    :elastic           => [:C],       # stiffness
-    :thermal           => [:κ],       # conductivity
-    :electric          => [:ϵ],       # permittivity
-    :fluid             => [:μ_f],     # fluid viscosity
-    :pressure          => [:α_p]      # Biot coefficient for poroelastic (linear force)
-)
-
-const CONJUGATE_FIELDS = Dict(
-    :elastic           => [:strain],
-    :thermal           => [:temperature_gradient],
-    :electric          => [:electric_field],
-    :fluid             => [:velocity_gradient],
-    :pressure          => [:pressure]
-)
-
-# ----------------------
-# Main Material Definition
-# ----------------------
-"""
-    HomoLib.Material
-
-    Core material definition system for multiphysics simulations.
-
-    # Main Components
-    1. "Material Definition": Create materials with "material_def" function
-    2. "Tensor Generation": Automatic generation of property tensors based on symmetry
-    3. "Physics Coupling": Support for coupled physics (thermoelastic, piezoelectric, etc.)
-    4. "Display System": Pretty-printing of material properties
-
-    # Key Features
-    - Supports multiple physics: elastic, thermal, electric, fluid, and their couplings
-    - Handles various material symmetries: isotropic, orthotropic, anisotropic, etc.
-    - Automatic tensor generation with validation
-    - Comprehensive property management
-
-    # Material Symmetries
-    - {:isotropic}: Same properties in all directions
-    - {:orthotropic}: Three orthogonal planes of symmetry
-    - {:anisotropic}: No symmetry (requires full tensor input)
-    - {:transversely_isotropic}: Axisymmetric about one direction
-    - {:out_of_plane}: Special 2D case with out-of-plane components
-
-    # Physics Types
-    - {:elastic}: Mechanical properties (E, ν, G)
-    - {:thermal}: Thermal conductivity
-    - {:electric}: Electrical permittivity
-    - {:fluid}: Fluid viscosity
-    - {:pressure}: Poroelastic effects
-
-    # Usage Examples
-    ```julia
-    # Isotropic elastic material
-    mat1 = material_def([:elastic], 3, :isotropic, E=210e9, ν=0.3)
-
-    # Orthotropic thermal material
-    mat2 = material_def([:thermal], 2, :orthotropic, κ=[1.2, 0.8])
-
-    # Piezoelectric material
-    mat3 = material_def([:elastic, :electric], 3, :orthotropic, 
-                        E1=70e9, E2=60e9, E3=50e9, ν12=0.3, ν13=0.25, ν23=0.2,
-                        G12=25e9, G13=20e9, G23=18e9, ϵ=diagm([12, 12, 10]), 
-                        e=[0 0 0 0 12 0; 0 0 0 12 0 0; -4 -4 14 0 0 0])
-
-    # Thermoelastic material with mass properties
-    mat4 = material_def([:elastic, :thermal], 3, :isotropic,
-                        E=200e9, ν=0.3, α=12e-6, κ=45.0,
-                        mass_properties=Dict(:ρ=>7850, :c_p=>500))
-                        
-    The function automatically generates appropriate tensors based on parameters
-    For anisotropic materials, full tensors must be provided
-
-    For out-of-plane 2D, special tensors include out-of-plane components
-"""
-function material_def(physics::Vector{Symbol}, dim::Int, symmetry::Symbol; 
-                     mass_properties=nothing, kwargs...)
-    dim ∈ (1, 2, 3) || error("Invalid dimension: $dim")
-    symmetry ∈ ALLOWED_SYMMETRIES || error("Invalid symmetry: $symmetry")
-
-    props = Dict{Symbol, Any}(kwargs...)
-    physics = unique(copy(physics))
-    tensors = AbstractMatrix[]
-    B_types = Symbol[]
-
-    # ---- Base Physics ----
-    if :elastic in physics
-        push!(tensors, elastic_tensor(dim, symmetry, props))
-        push!(B_types, :strain)
-    end
-    if :electric in physics
-        push!(tensors, permittivity_tensor(dim, symmetry, props))
-        push!(B_types, :electric_field)
-    end
-    if :thermal in physics
-        push!(tensors, conductivity_tensor(dim, symmetry, props))
-        push!(B_types, :temperature_gradient)
-    end
-    if :fluid in physics
-        push!(tensors, fluid_viscosity_tensor(dim, props))
-        push!(B_types, :velocity_gradient)
-    end
-
-    # ---- Coupling Effects ----
-    # Piezoelectric (elastic + electric)
-    if (:elastic in physics) && (:electric in physics) && haskey(props, :e)
-        push!(tensors, piezo_tensor(dim, symmetry, props))
-    end
-
-    # Thermal expansion requires elasticity
-    if haskey(props, :α)
-        :elastic ∉ physics && error("Thermal expansion requires elasticity")
-        α_vec = thermal_expansion_tensor(dim, symmetry, props)
-        β = -tensors[findfirst(isequal(elastic_tensor(dim, symmetry, props)), tensors)] * α_vec
-        push!(tensors, reshape(β, :, 1))
-    end
-    # Stokes flow
-    if :fluid in physics && haskey(props, :α_p) && :elastic ∉ physics
-        α_p_vec  = poroelastic_tensor(dim, symmetry, props)
-        push!(tensors, reshape(α_p_vec, :, 1))
-        push!(B_types, :pressure)
-    end
-    
-    # ---- Simple Poroelastic (pressure as force) ----
-    if :elastic in physics && haskey(props, :α_p) && :fluid ∉ physics
-        α_p_vec  = poroelastic_tensor(dim, symmetry, props)
-        push!(tensors, reshape(α_p_vec, :, 1))
-        # push!(B_types, :pressure)
-    end
-
-    # Biot poroelastic coupling (elastic + fluid)
-    if (:elastic in physics) && (:fluid in physics) && haskey(props, :M) && haskey(props, :α_p)
-        α_p_vec = poroelastic_tensor(dim, symmetry, props)
-        invM_vec = fill(1/props[:M], length(α_p_vec))
-        push!(tensors, reshape(α_p_vec, :, 1), reshape(invM_vec, :, 1))
-    end
-
-    return Material(physics, dim, symmetry, props, tensors, B_types, mass_properties)
-end
-
-# ----------------------
-# Core Tensor Generators
-# ----------------------
-
-# Elastic Tensor
-function elastic_tensor(dim::Int, symmetry::Symbol, props::Dict)
-    # Check if full matrix is provided
-    if haskey(props, :C) && props[:C] isa AbstractMatrix
-        C = props[:C]
-        # Validate size based on dimension and symmetry
-        if dim == 1
-            size(C) == (1,1) || error("C must be 1×1 in 1D")
-        elseif dim == 2
-            if symmetry == :out_of_plane
-                size(C) == (4,4) || error("C must be 4×4 for 2D out-of-plane")
-            else
-                size(C) == (3,3) || error("C must be 3×3 in 2D")
-            end
-        else  # 3D
-            size(C) == (6,6) || error("C must be 6×6 in 3D")
+    T = getproperty(m, :tensors)
+    if !isempty(T)
+        println(io, "Tensors:")
+        for (i,A) in enumerate(T)
+            println(io, "  T[$i] :: ", size(A))
         end
-        return C
-    end
-    
-    # Otherwise generate automatically based on symmetry
-    if symmetry == :isotropic
-        E, ν = props[:E], props[:ν]
-        E > 0 || throw(ArgumentError("E must be positive"))
-        (-1 < ν < 0.5) || throw(ArgumentError("ν out of range [0, 0.5)"))
-        
-        G = E / (2 * (1 + ν))
-        if dim == 1
-            return [E;;]
-        elseif dim == 2
-            plane_stress = get(props, :plane_stress, false)
-            if plane_stress
-                factor = E / (1 - ν^2)
-                return factor * [1.0 ν 0.0;
-                                ν 1.0 0.0;
-                                0.0 0.0 (1 - ν)/2]
-            else
-                factor = E / ((1 + ν) * (1 - 2ν))
-                return factor * [1-ν ν 0.0;
-                                ν 1-ν 0.0;
-                                0.0 0.0 (1 - 2ν)/2]
-            end
-        else  # 3D
-            λ = E * ν / ((1 + ν) * (1 - 2ν))
-            return [λ+2G λ     λ     0  0  0;
-                    λ     λ+2G λ     0  0  0;
-                    λ     λ     λ+2G 0  0  0;
-                    0     0     0     G  0  0;
-                    0     0     0     0  G  0;
-                    0     0     0     0  0  G]
-        end
-        
-    elseif symmetry == :orthotropic
-        required = (:E1, :E2, :E3, :ν12, :ν13, :ν23, :G12, :G13, :G23)
-        missing_params = [p for p in required if !haskey(props, p)]
-        !isempty(missing_params) && throw(ArgumentError("Missing parameters: $(join(missing_params, ", "))"))
-        
-        E1, E2, E3 = props[:E1], props[:E2], props[:E3]
-        ν12, ν13, ν23 = props[:ν12], props[:ν13], props[:ν23]
-        G12, G13, G23 = props[:G12], props[:G13], props[:G23]
-        
-        # Create compliance matrix
-        S = zeros(6, 6)
-        S[1,1] = 1/E1; S[2,2] = 1/E2; S[3,3] = 1/E3
-        S[1,2] = S[2,1] = -ν12/E1
-        S[1,3] = S[3,1] = -ν13/E1
-        S[2,3] = S[3,2] = -ν23/E2
-        S[4,4] = 1/G23; S[5,5] = 1/G13; S[6,6] = 1/G12
-        
-        return inv(Symmetric(S))
-        
-    elseif symmetry == :anisotropic
-        haskey(props, :C_matrix) || throw(ArgumentError("C_matrix required for anisotropic material"))
-        C = props[:C_matrix]
-        size(C) == (6,6) || throw(ArgumentError("C_matrix must be 6×6"))
-        issymmetric(C) || throw(ArgumentError("C_matrix must be symmetric"))
-        return C
-        
-    elseif symmetry == :transversely_isotropic
-        required = (:E1, :E3, :ν12, :ν23, :G12)
-        missing_params = [p for p in required if !haskey(props, p)]
-        !isempty(missing_params) && throw(ArgumentError("Missing parameters: $(join(missing_params, ", "))"))
-        
-        E1, E3, ν12, ν23, G12 = props[:E1], props[:E3], props[:ν12], props[:ν23], props[:G12]
-        D = (1 + ν12) * (1 - ν12 - 2*ν23^2*(E3/E1))
-        D > 0 || throw(ArgumentError("Unstable parameter combination (D = $D ≤ 0)"))
-        
-        C11 = (E1*(1 - ν23^2*(E3/E1)))/D
-        C12 = (E1*(ν12 + ν23^2*(E3/E1)))/D
-        C13 = (E1*ν23*(1 + ν12))/D
-        C33 = (E3*(1 - ν12^2))/D
-        C44 = E3/(2*(1 + ν23))
-        
-        return [C11 C12 C13 0 0 0;
-                C12 C11 C13 0 0 0;
-                C13 C13 C33 0 0 0;
-                0 0 0 C44 0 0;
-                0 0 0 0 C44 0;
-                0 0 0 0 0 G12]
-                
-    elseif symmetry == :out_of_plane
-        E, ν = props[:E], props[:ν]
-        G = E /  ((1 + ν) * (1 - 2ν))
-        plane_stress = get(props, :plane_stress, false)
-        if plane_stress
-            return E / (1 - ν^2) * [1 ν 0 ν;
-                                    ν 1 0 ν; 
-                                    0 0 (1 - ν) / 2 0;
-                                    ν ν 0 1]
-        else
-            return G * [1 - ν ν 0 ν;
-                        ν 1 - ν 0 ν;
-                        0 0 (1 - 2ν) / 2 0;
-                        ν ν 0 1 - ν]
-        end
-    else
-        throw(ArgumentError("Unsupported symmetry: $symmetry"))
-    end
-end
-
-# Permittivity Tensor
-function permittivity_tensor(dim::Int, symmetry::Symbol, props::Dict)
-    # Now just validates the provided matrix
-    haskey(props, :ϵ) || error("Missing permittivity :ϵ (full matrix)")
-    ϵ = props[:ϵ]
-    if symmetry == :out_of_plane
-        size(ϵ) == (3, 3) || error("ϵ must be 3×3 for out-of-plane in 2D")
-    else
-        size(ϵ) == (dim, dim) || error("ϵ must be $dim×$dim matrix")
     end
 
-    issymmetric(ϵ) || @warn "Permittivity matrix is not symmetric"
-    return ϵ
-end
-
-
-# Conductivity Tensor
-function conductivity_tensor(dim::Int, symmetry::Symbol, props::Dict)
-    # Check if full matrix is provided
-    if haskey(props, :κ_matrix)
-        κ = props[:κ_matrix]
-        size(κ) == (dim, dim) || error("κ_matrix must be $dim×$dim")
-        return κ
-    end
-    
-    # Otherwise generate automatically
-    haskey(props, :κ) || error("Missing conductivity :κ")
-    κ_input = props[:κ]
-    
-    if κ_input isa Number
-        # Isotropic case
-        return κ_input * I(dim)
-    elseif κ_input isa AbstractVector
-        if symmetry == :orthotropic
-            length(κ_input) == dim || throw(ArgumentError("κ must be [κ_u, κ_v, κ_w] for orthotropic"))
-            return dim == 2 ? Diagonal([κ_input[1], κ_input[2]]) : Diagonal([κ_input[1], κ_input[2], κ_input[3]])
-        elseif symmetry == :transversely_isotropic
-            length(κ_input) == 2 || throw(ArgumentError("κ must be [κ_p, κ_z] for transversely_isotropic"))
-            return dim == 2 ? Diagonal([κ_input[1], κ_input[1]]) : Diagonal([κ_input[1], κ_input[1], κ_input[2]])
-        elseif symmetry == :out_of_plane
-            length(κ_input) == 3 || error("κ must be length 3 for out-of-plane")
-            return Diagonal(κ_input)
-        else
-            throw(ArgumentError("Vector input not supported for symmetry $symmetry"))
+    mp = getproperty(m, :mass_properties)
+    if !isempty(mp)
+        println(io, "Mass props:")
+        for (k,v) in mp
+            println(io, "  $k = $v")
         end
-    elseif κ_input isa AbstractMatrix
-        size(κ_input) == (dim, dim) || throw(ArgumentError("κ matrix must be $dim×$dim"))
-        issymmetric(κ_input) || throw(ArgumentError("κ matrix must be symmetric"))
-        return κ_input
-    else
-        throw(ArgumentError("Invalid κ type: $(typeof(κ_input))"))
-    end
-end
-
-# Fluid Viscosity Tensor (Stokes creeping flow)
-function fluid_viscosity_tensor(dim::Int, props::Dict)
-    haskey(props, :μ_f) ||  error("Missing fluid viscosity :μ_f")
-    μ_f = props[:μ_f]
-    # simple isotropic viscous tensor for Newtonian fluid
-    if dim == 2
-        return μ_f * [2 0 0; 0 2 0; 0 0 1]
-    elseif dim == 3
-        return μ_f * [2 0 0 0 0 0;
-                      0 2 0 0 0 0;
-                      0 0 2 0 0 0;
-                      0 0 0 1 0 0;
-                      0 0 0 0 1 0;
-                      0 0 0 0 0 1]
-    end
-    error("Unsupported dim for fluid viscosity")
-end
-
-# Piezoelectric Tensor
-function piezo_tensor(dim::Int, symmetry::Symbol, props::Dict)
-    # Now just validates the provided matrix
-    haskey(props, :e) || error("Piezoelectric material requires :e parameter (full matrix)")
-    e = props[:e]
-    
-    if dim == 2
-        if symmetry == :out_of_plane
-            size(e) == (3, 4) || error("Piezo matrix must be 3×4 for out-of-plane in 2D")
-        else
-            size(e) == (2, 3) || error("Piezo matrix must be 2×3 in 2D")
-        end
-    else
-        size(e) == (3, 6) || error("Piezo matrix must be 3×6 in 3D")
-    end
-    return e
-end
-
-# Thermal Expansion Tensor
-# function thermal_expansion_tensor(dim::Int, symmetry::Symbol, props::Dict)
-#     haskey(props, :α) || error("Missing thermal expansion :α")
-#     α = props[:α]
-#     return α isa Number ? fill(α, (symmetry==:out_of_plane && dim==2) ? 4 : (dim==3 ? 6 : dim)) : α
-# end
-function thermal_expansion_tensor(dim::Int, symmetry::Symbol, props::Dict)
-    # Check if full vector is provided
-    if haskey(props, :α_vector)
-        α = props[:α_vector]
-        expected_len = dim == 2 ? (symmetry == :out_of_plane ? 4 : 3) : 6
-        length(α) == expected_len || error("α_vector must be length $expected_len for $dim D $symmetry")
-        return α
-    end
-    
-    # Otherwise generate automatically
-    haskey(props, :α) || error("Missing thermal expansion :α")
-    α = props[:α]
-    
-    if symmetry == :isotropic
-        if dim == 1
-            return [α]
-        elseif dim == 2
-            return symmetry == :out_of_plane ? [α, α, 0, 0] : [α, α, 0]
-        else
-            return [α, α, α, 0, 0, 0]
-        end
-        
-    elseif symmetry == :orthotropic
-        if α isa Number
-            if dim == 2
-                return symmetry == :out_of_plane ? [α, α, 0, 0] : [α, α, 0]
-            else
-                return [α, α, α, 0, 0, 0]
-            end
-        else
-            if dim == 2
-                length(α) == 2 || error("α vector must have 2 components for 2D orthotropic")
-                return symmetry == :out_of_plane ? [α[1], α[2], 0, 0] : [α[1], α[2], 0]
-            else
-                length(α) == 3 || error("α vector must have 3 components for 3D orthotropic")
-                return [α[1], α[2], α[3], 0, 0, 0]
-            end
-        end
-        
-    elseif symmetry == :transversely_isotropic
-        if α isa Number
-            if dim == 2
-                return symmetry == :out_of_plane ? [α, α, 0, 0] : [α, α, 0]
-            else
-                return [α, α, α, 0, 0, 0]
-            end
-        else
-            length(α) == 2 || error("Transverse isotropic α requires [α_p, α_z]")
-            if dim == 2
-                return symmetry == :out_of_plane ? [α[1], α[1], 0, 0] : [α[1], α[1], 0]
-            else
-                return [α[1], α[1], α[2], 0, 0, 0]
-            end
-        end
-        
-    elseif symmetry == :out_of_plane
-        if α isa Number
-            return dim == 2 ? [α, α, 0, 0] : error("Out-of-plane only for 2D")
-        else
-            dim == 2 && length(α) == 4 || error("Out-of-plane α must be scalar or length-4 vector in 2D")
-            return α
-        end
-        
-    elseif symmetry == :anisotropic
-        expected_len = dim == 2 ? (symmetry == :out_of_plane ? 4 : 3) : 6
-        α isa AbstractVector || error("Anisotropic α must be a vector")
-        length(α) == expected_len || error("α must be length $expected_len for anisotropic $dim D")
-        return α
-        
-    else
-        error("Unsupported symmetry: $symmetry")
-    end
-end
-# Poroelastic Tensor (Biot coefficient)
-function poroelastic_tensor(dim::Int, symmetry::Symbol, props::Dict)
-    haskey(props, :α_p) || error("Missing Biot coefficient :α")
-    α = props[:α_p]
-    
-    if symmetry == :isotropic
-        if dim == 1
-            return [α]
-        elseif dim == 2
-            return symmetry == :out_of_plane ? [α, α, 0,0] : [α, α,0]
-        else
-            return [α, α, α,0,0,0]
-        end
-    else
-        return thermal_expansion_tensor(dim, symmetry, props)
     end
 end

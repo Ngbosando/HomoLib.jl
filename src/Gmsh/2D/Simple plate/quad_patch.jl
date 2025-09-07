@@ -37,7 +37,7 @@ function generate_irregular_quad_patch_mesh(E_o, element_type; nx=4, ny=4, pertu
     for j in 0:ny, i in 0:nx
         x = i * dx
         y = j * dy
-        # Perturb interior only
+        # Perturb interior 
         if 0 < i < nx && 0 < j < ny
             x += perturb * dx * (2rand() - 1)
             y += perturb * dy * (2rand() - 1)
@@ -73,7 +73,7 @@ function generate_irregular_quad_patch_mesh(E_o, element_type; nx=4, ny=4, pertu
 
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(2)
-    # Define the element order (set high-order if needed)
+    # Define the element order 
     gmsh.model.mesh.setOrder(E_o)
 
     # Retrieve nodes and elements

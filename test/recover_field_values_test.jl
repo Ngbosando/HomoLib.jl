@@ -1,29 +1,26 @@
-
 using Test
-using HomoLib: recover_field_values, material_def,
-            shape_data,jacobian_data,build_B_matrices,
-            shape_data,jacobian_data,build_B_matrices,
-            get_node_wise_permutation
-   
+using HomoLib: recover_field_values, ThermalMaterial,PiezoelectricMaterial
+                precompute_geometric_data, get_node_wise_permutation
+using Statistics, LinearAlgebra 
 @testset "Recover Field Values Thermal" begin
     coords = [0.0 0.0; 1.0 0.0; 0.0 1.0]
     conn = reshape([1,2,3], 1, 3)
     element_type = :Tri3
     order = 1
     dim = 2
-    mat = material_def([:thermal], dim, :isotropic; κ=1.5)
+    mat = ThermalMaterial(2, k=1.5)
     # Precompute data
-    gauss_data = shape_data(element_type, order, dim)
-    jacobian_cache = jacobian_data(conn, coords, gauss_data, dim)
-    B_dicts = build_B_matrices(coords, conn, mat, gauss_data, jacobian_cache)
-    Geometric_Data = (gauss_data = gauss_data,jacobian_cache = jacobian_cache,B_dicts = B_dicts )
+    Geometric_Data = precompute_geometric_data(
+        element_type, 1, dim,
+        conn, coords, mat
+    );
     a = 2.0
     b = 3.0
     Tvec = [0.0, a, b]
     Uresult = (T = Tvec,)
 
-    recovered = recover_field_values(conn, coords, mat, Uresult, nothing,
-                                     element_type, order, dim,Geometric_Data)
+    recovered = recover_field_values(mat,conn, coords, Uresult,
+                                     Geometric_Data)
 
     expected_grad = [a, b]
     expected_flux = -1.5 .* expected_grad
@@ -47,14 +44,20 @@ end
     e_tensor = [0.2 0.1 0.0;
                 -0.1 0.3 0.0]
     ϵ_tensor = Matrix{Float64}(I, 2, 2)
-    mat = material_def([:elastic, :electric], dim, :isotropic;
-                       E=1.0, ν=0.0, plane_stress=true,
-                       e=e_tensor, ϵ=ϵ_tensor)
+    E=1.0 
+    ν=0.0
+    E_mod = E / (1 - ν^2)
+    C_piezo = E_mod * [1.0 ν 0.0;
+                    ν 1.0 0.0;
+                    0.0 0.0 (1 - ν)/2]
+
+    mat = PiezoelectricMaterial(2, C=C_piezo, ε=ϵ_tensor, e=e_tensor)
+                       
     # Precompute data
-    gauss_data = shape_data(element_type, order, dim)
-    jacobian_cache = jacobian_data(conn, coords, gauss_data, dim)
-    B_dicts = build_B_matrices(coords, conn, mat, gauss_data, jacobian_cache)
-    Geometric_Data = (gauss_data = gauss_data,jacobian_cache = jacobian_cache,B_dicts = B_dicts )                   
+    Geometric_Data = precompute_geometric_data(
+        element_type, order, dim,
+        conn, coords, mat
+    );                
 
     α = 1e-3
     β = 2e-3
@@ -67,9 +70,9 @@ end
     perm = get_node_wise_permutation(mat, nn)
 
     Uresult = (U = Uϕ[perm], ϕ = Uϕ[perm])
-    recovered = recover_field_values(conn, coords, mat, Uresult, nothing,
-                                     element_type, order, dim, Geometric_Data)
 
+    recovered = recover_field_values(mat,conn, coords, Uresult,
+                                     Geometric_Data)
     ε_expected = [α, β, 0.0]
     E_expected = [c, d]
     σ_expected = mat.tensors[1] * ε_expected - transpose(e_tensor) * E_expected
@@ -84,8 +87,8 @@ end
         @test isapprox(recovered.stress[i,2], σ_expected[2]; atol=1e-12)
         @test isapprox(recovered.stress[i,3], σ_expected[3]; atol=1e-12)
 
-        @test isapprox(recovered.elec[i,1], E_expected[1]; atol=1e-12)
-        @test isapprox(recovered.elec[i,2], E_expected[2]; atol=1e-12)
+        @test isapprox(recovered.elec_field[i,1], E_expected[1]; atol=1e-12)
+        @test isapprox(recovered.elec_field[i,2], E_expected[2]; atol=1e-12)
 
         @test isapprox(recovered.elec_disp[i,1], D_expected[1]; atol=1e-12)
         @test isapprox(recovered.elec_disp[i,2], D_expected[2]; atol=1e-12)

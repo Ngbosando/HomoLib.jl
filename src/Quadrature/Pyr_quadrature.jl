@@ -2,7 +2,7 @@
 # pyramid integration rule
 # =============================================
 
-function integration_rule(element::PyramidElement, order::Int)
+function int_rule(element::PyramidElement, order::Int)
     # Get Gauss-Legendre points and weights for [-1,1] in all 3 dimensions
     r, wr = gausslegendre(order)
     s, ws = gausslegendre(order)

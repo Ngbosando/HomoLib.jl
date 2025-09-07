@@ -53,25 +53,23 @@ function plaque(b, h, lc,lt1,lt2, filename, E_o, element_type::Symbol; show_gui=
 
     # Set transfinite meshing options
  
-        gmsh.model.geo.mesh.setTransfiniteCurve(1, lt1)
-        gmsh.model.geo.mesh.setTransfiniteCurve(2, lt2)
-        gmsh.model.geo.mesh.setTransfiniteCurve(3, lt1)
-        gmsh.model.geo.mesh.setTransfiniteCurve(4, lt2)
-        gmsh.model.geo.mesh.setTransfiniteSurface(1)
+    gmsh.model.geo.mesh.setTransfiniteCurve(1, lt1)
+    gmsh.model.geo.mesh.setTransfiniteCurve(2, lt2)
+    gmsh.model.geo.mesh.setTransfiniteCurve(3, lt1)
+    gmsh.model.geo.mesh.setTransfiniteCurve(4, lt2)
+    gmsh.model.geo.mesh.setTransfiniteSurface(1)
     
     if element_type == :quadrilateral
         gmsh.model.geo.mesh.setRecombine(2, 1)
     end
 
-    # -------------------------------
     # Create physical groups for the domain and boundaries
-    # -------------------------------
 
-    # Physical group for the domain (the surface, dim = 2)
+    # Physical group for the domain (the surface)
     gmsh.model.addPhysicalGroup(2, [1], 1)
     gmsh.model.setPhysicalName(2, 1, "Domain")
     
-    # Physical groups for each boundary line (dim = 1)
+    # Physical groups for each boundary line 
     # Bottom edge (line 1)
     gmsh.model.addPhysicalGroup(1, [1], 2)
     gmsh.model.setPhysicalName(1, 2, "Bottom")
@@ -92,7 +90,7 @@ function plaque(b, h, lc,lt1,lt2, filename, E_o, element_type::Symbol; show_gui=
     gmsh.model.mesh.generate(2)
     gmsh.write(filename * ".msh")
 
-    # Define the element order (set high-order if needed)
+    # Define the element order 
     gmsh.model.mesh.setOrder(E_o)
 
     # Retrieve nodes and elements

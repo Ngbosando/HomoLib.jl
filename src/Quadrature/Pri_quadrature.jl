@@ -3,9 +3,9 @@
 # prism integration rule
 # =============================================
 
-
-function integration_rule(element::PrismaticElement, order::Int)
-    tri_points, tri_weights = integration_rule(Tri3(),order)  # Pour la base triangulaire
+function int_rule(element::PrismaticElement, order::Int)
+    tri_points, tri_weights = integration_rule(:Tri3, order,Val(2))
+    
     z, wz = gausslegendre(order)   
     
    n = length(tri_points) * length(z)

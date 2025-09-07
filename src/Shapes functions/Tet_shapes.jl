@@ -1,330 +1,96 @@
+
 # =============================================
-# Tetrahedral Element Structs
+# Tetrahedral 
 # =============================================
 
-# function generate_tet_nodes(p::Int)
-#     nodes = NTuple{4,Int}[]
-#     for a in 0:p
-#         for b in 0:(p - a)
-#             for c in 0:(p - a - b)
-#                 d = p - a - b - c
-#                 push!(nodes, (a, b, c, d))
-#             end
-#         end
-#     end
-#     return nodes
-# end
+function _tet_nodes(::Val{P})::SVector{((P+1)*(P+2)*(P+3)÷6), NTuple{4,Int}} where {P}
+    N = (P + 1) * (P + 2) * (P + 3) ÷ 6
+    nodes = MVector{N, NTuple{4,Int}}(undef)
+    idx = 1
+    @inbounds for i in 0:P, j in 0:(P - i), k in 0:(P - i - j)
+        l = P - i - j - k
+        nodes[idx] = (l, k, j, i)   # (a,b,c,d) for (λ1,λ2,λ3,λ4)
+        idx += 1
+    end
+    return SVector{N, NTuple{4,Int}}(nodes)
+end
 
-# function product_term(exponent, p, λ)
-#     exponent == 0 && return one(λ)
-#     term = one(λ)
-#     for k in 0:exponent-1
-#         term *= (p*λ - k) / (exponent - k)
-#     end
-#     return term
-# end
-# function shapeFunctions_TetN(ξ::T, η::T, ζ::T, p::Int) where T<:Real
-#     nodes = generate_tet_nodes(p)
+function product_term(a::Int, p::Int, λ::T) where {T<:Real}
+    a == 0 && return one(T)
+    pT = T(p)
+    res = one(T)
+    @inbounds @simd for k in 0:(a-1)
+        res *= (pT*λ - T(k)) / T(a - k)
+    end
+    return res
+end
 
-#     function N_vec(x)
-#         ξ, η, ζ = x
-#         λ1 = 1 - ξ - η - ζ
-#         λ2 = ξ
-#         λ3 = η
-#         λ4 = ζ
-#         [prod([
-#             product_term(a, p, λ1),
-#             product_term(b, p, λ2),
-#             product_term(c, p, λ3),
-#             product_term(d, p, λ4)
-#         ]) for (a, b, c, d) in nodes]
-#     end
-
-#     x = [ξ, η, ζ]
-#     N = N_vec(x)
-#     J = ForwardDiff.jacobian(N_vec, x)
-
-#     dN_dξ = J[:, 1]
-#     dN_dη = J[:, 2]
-#     dN_dζ = J[:, 3]
-
-#     return N, dN_dξ, dN_dη, dN_dζ
-# end
-
-
-# # Dispatch functions for specific TET types
-# function shape_functions(::Tet4, ξ::T, η::T, ζ::T) where T<:Real
-
-#     return shapeFunctions_TetN(ξ, η, ζ, 1)
-# end
-
-# function shape_functions(::Tet10, ξ::T, η::T, ζ::T) where T<:Real
-#     return shapeFunctions_TetN(ξ, η, ζ, 2)
-# end
-
-# function shape_functions(::Tet20, ξ::T, η::T, ζ::T) where T<:Real
-#     return shapeFunctions_TetN(ξ, η, ζ, 3)
-# end
-
-# function shape_functions(::Tet35, ξ::T, η::T, ζ::T) where T<:Real
-#     return shapeFunctions_TetN(ξ, η, ζ, 4)
-# end
-
-# function shape_functions(::Tet56, ξ::T, η::T, ζ::T) where T<:Real 
-#     return shapeFunctions_TetN(ξ, η, ζ, 5)
-# end
-
-
-function generate_tet_nodes(p::Int)
-    nodes = NTuple{4, Int}[]
-    for a in 0:p
-        for b in 0:(p - a)
-            for c in 0:(p - a - b)
-                d = p - a - b - c
-                push!(nodes, (a, b, c, d))
-            end
+function d_product_term(a::Int, p::Int, λ::T) where {T<:Real}
+    a == 0 && return zero(T)
+    pT = T(p)
+    s  = zero(T)
+    @inbounds for j in 0:(a - 1)
+        term = one(T)
+        # no `continue` in a @simd loop
+        @inbounds @simd for k in 0:(a - 1)
+            num   = pT*λ - T(k)
+            denom = T(a - k)
+            # skip k==j by multiplying by 1 (branch allowed; `continue` is not)
+            factor = (k == j) ? one(T) : (num / denom)
+            term *= factor
         end
+        s += pT * term / T(a - j)
     end
-    return nodes
+    return s
 end
 
-function product_term(a::Int, p::Int, λ::Real)
-    if a == 0
-        return one(λ)
-    end
-    result = one(λ)
-    for k in 0:(a - 1)
-        result *= (p * λ - k) / (a - k)
-    end
-    return result
-end
+function shape_functions_TetN(ξ_in::T, η_in::T, ζ_in::T, ::Val{P}) where {T<:Real, P}
+    Nn = (P + 1) * (P + 2) * (P + 3) ÷ 6
+    nodes = _tet_nodes(Val(P))                     # SVector{Nn, NTuple{4,Int}}
 
-function d_product_term(a::Int, p::Int, λ::Real)
-    if a == 0
-        return 0.0
-    end
-    sum = 0.0
-    for j in 0:(a - 1)
-        term = 1.0
-        for k in 0:(a - 1)
-            if k != j
-                term *= (p * λ - k) / (a - k)
-            end
-        end
-        sum += p / (a - j) * term
-    end
-    return sum
-end
-
-function shapeFunctions_TetN(ξ::T, η::T, ζ::T, p::Int) where T<:Real
-    nodes = generate_tet_nodes(p)
-    λ1 = 1 - ξ - η - ζ
+    # ensure arithmetic stays in T
+    oneT = one(T)
+    ξ, η, ζ = ξ_in, η_in, ζ_in
+    λ1 = oneT - ξ - η - ζ
     λ2 = ξ
     λ3 = η
     λ4 = ζ
 
-    N = T[]
-    dN_dξ = T[]
-    dN_dη = T[]
-    dN_dζ = T[]
+    N      = MVector{Nn, T}(undef)
+    dN_dξ  = MVector{Nn, T}(undef)
+    dN_dη  = MVector{Nn, T}(undef)
+    dN_dζ  = MVector{Nn, T}(undef)
 
-    for (a, b, c, d) in nodes
-        # Value
-        P1 = product_term(a, p, λ1)
-        P2 = product_term(b, p, λ2)
-        P3 = product_term(c, p, λ3)
-        P4 = product_term(d, p, λ4)
+    @inbounds for (idx, (a,b,c,d)) in pairs(nodes)
+        # values
+        P1 = product_term(a, P, λ1)
+        P2 = product_term(b, P, λ2)
+        P3 = product_term(c, P, λ3)
+        P4 = product_term(d, P, λ4)
+        val = P1 * P2 * P3 * P4
+        N[idx] = val
 
-        Nval = P1 * P2 * P3 * P4
-        push!(N, Nval)
+        # derivatives (dλ1/dξ = dλ1/dη = dλ1/dζ = -1; others per coordinate)
+        dP1 = d_product_term(a, P, λ1)
+        dP2 = d_product_term(b, P, λ2)
+        dP3 = d_product_term(c, P, λ3)
+        dP4 = d_product_term(d, P, λ4)
 
-        # Derivatives
-        dP1 = d_product_term(a, p, λ1)
-        dP2 = d_product_term(b, p, λ2)
-        dP3 = d_product_term(c, p, λ3)
-        dP4 = d_product_term(d, p, λ4)
+        # ∂/∂ξ: λ1'=-1, λ2'=+1, λ3'=0, λ4'=0
+        dN_dξ[idx] = (-dP1)*P2*P3*P4 + P1*( dP2)*P3*P4
 
-        dλ1_dξ = -1.0
-        dλ2_dξ = 1.0
-        dλ3_dξ = 0.0
-        dλ4_dξ = 0.0
+        # ∂/∂η: λ1'=-1, λ2'=0, λ3'=+1, λ4'=0
+        dN_dη[idx] = (-dP1)*P2*P3*P4 + P1*( 0   )*P3*P4 + P1*P2*( dP3)*P4
 
-        dλ1_dη = -1.0
-        dλ2_dη = 0.0
-        dλ3_dη = 1.0
-        dλ4_dη = 0.0
-
-        dλ1_dζ = -1.0
-        dλ2_dζ = 0.0
-        dλ3_dζ = 0.0
-        dλ4_dζ = 1.0
-
-        dNξ = (dP1 * dλ1_dξ) * P2 * P3 * P4 +
-              P1 * (dP2 * dλ2_dξ) * P3 * P4 +
-              P1 * P2 * (dP3 * dλ3_dξ) * P4 +
-              P1 * P2 * P3 * (dP4 * dλ4_dξ)
-
-        dNη = (dP1 * dλ1_dη) * P2 * P3 * P4 +
-              P1 * (dP2 * dλ2_dη) * P3 * P4 +
-              P1 * P2 * (dP3 * dλ3_dη) * P4 +
-              P1 * P2 * P3 * (dP4 * dλ4_dη)
-
-        dNζ = (dP1 * dλ1_dζ) * P2 * P3 * P4 +
-              P1 * (dP2 * dλ2_dζ) * P3 * P4 +
-              P1 * P2 * (dP3 * dλ3_dζ) * P4 +
-              P1 * P2 * P3 * (dP4 * dλ4_dζ)
-
-        push!(dN_dξ, dNξ)
-        push!(dN_dη, dNη)
-        push!(dN_dζ, dNζ)
+        # ∂/∂ζ: λ1'=-1, λ2'=0, λ3'=0, λ4'=+1
+        dN_dζ[idx] = (-dP1)*P2*P3*P4 + P1*( 0   )*P3*P4 + P1*P2*( 0   )*P4 + P1*P2*P3*( dP4)
     end
 
-    return N, dN_dξ, dN_dη, dN_dζ
+    return SVector{Nn,T}(N), SVector{Nn,T}(dN_dξ), SVector{Nn,T}(dN_dη), SVector{Nn,T}(dN_dζ)
 end
 
-# Dispatch
-function shape_functions(::Tet4, ξ::T, η::T, ζ::T) where T<:Real
-    return shapeFunctions_TetN(ξ, η, ζ, 1)
-end
-function shape_functions(::Tet10, ξ::T, η::T, ζ::T) where T<:Real
-    return shapeFunctions_TetN(ξ, η, ζ, 2)
-end
-function shape_functions(::Tet20, ξ::T, η::T, ζ::T) where T<:Real
-    return shapeFunctions_TetN(ξ, η, ζ, 3)
-end
-function shape_functions(::Tet35, ξ::T, η::T, ζ::T) where T<:Real
-    return shapeFunctions_TetN(ξ, η, ζ, 4)
-end
-function shape_functions(::Tet56, ξ::T, η::T, ζ::T) where T<:Real
-    return shapeFunctions_TetN(ξ, η, ζ, 5)
-end
-
-
-# function generate_tet_nodes(p::Int)
-#     p == 0 && return [(0, 0, 0, 0)]
-#     nodes = NTuple{4, Int}[]
-#     for d in 0:p
-#         for c in 0:(p - d)
-#             for b in 0:(p - d - c)
-#                 a = p - d - c - b
-#                 push!(nodes, (a, b, c, d))
-#             end
-#         end
-#     end
-#     return nodes
-# end
-
-# function product_term(a::Int, p::Int, λ::Real)
-#     a == 0 && return 1.0
-#     term = 1.0
-#     for k in 0:(a-1)
-#         term *= (p * λ - k) / (a - k)
-#     end
-#     return term
-# end
-
-# function d_product_term(a::Int, p::Int, λ::Real)
-#     a == 0 && return 0.0
-#     result = 0.0
-#     for j in 0:(a-1)
-#         term_val = 1.0
-#         for k in 0:(a-1)
-#             if k != j
-#                 term_val *= (p * λ - k) / (a - k)
-#             end
-#         end
-#         result += p * term_val / (a - j)
-#     end
-#     return result
-# end
-
-# function shapeFunctions_TetN(ξ::T, η::T, ζ::T, p::Int) where T<:Real
-#     λ1 = 1 - ξ - η - ζ
-#     λ2 = ξ
-#     λ3 = η
-#     λ4 = ζ
-
-#     nodes = generate_tet_nodes(p)
-#     n_nodes = length(nodes)
-#     N = zeros(T, n_nodes)
-#     dN_dξ = zeros(T, n_nodes)
-#     dN_dη = zeros(T, n_nodes)
-#     dN_dζ = zeros(T, n_nodes)
-
-#     # Precompute basis functions and their derivatives
-#     P = [Vector{T}(undef, 4) for _ in 1:4]
-#     dP = [Vector{T}(undef, 4) for _ in 1:4]
-
-#     for i in 1:4
-#         for (idx, (a, b, c, d)) in enumerate(nodes)
-#             if i == 1
-#                 P[1][idx] = product_term(a, p, λ1)
-#                 dP[1][idx] = d_product_term(a, p, λ1)
-#             elseif i == 2
-#                 P[2][idx] = product_term(b, p, λ2)
-#                 dP[2][idx] = d_product_term(b, p, λ2)
-#             elseif i == 3
-#                 P[3][idx] = product_term(c, p, λ3)
-#                 dP[3][idx] = d_product_term(c, p, λ3)
-#             else
-#                 P[4][idx] = product_term(d, p, λ4)
-#                 dP[4][idx] = d_product_term(d, p, λ4)
-#             end
-#         end
-#     end
-
-#     # Compute shape functions and derivatives
-#     for (idx, (a, b, c, d)) in enumerate(nodes)
-#         P1 = P[1][idx]
-#         P2 = P[2][idx]
-#         P3 = P[3][idx]
-#         P4 = P[4][idx]
-        
-#         dP1 = dP[1][idx]
-#         dP2 = dP[2][idx]
-#         dP3 = dP[3][idx]
-#         dP4 = dP[4][idx]
-
-#         # Shape function
-#         N[idx] = P1 * P2 * P3 * P4
-
-#         # Derivatives using product rule
-#         dN_dξ_val = (dP1 * (-1) * P2 * P3 * P4) +
-#                     (P1 * dP2 * 1 * P3 * P4) +
-#                     (P1 * P2 * dP3 * 0 * P4) +
-#                     (P1 * P2 * P3 * dP4 * 0)
-        
-#         dN_dη_val = (dP1 * (-1) * P2 * P3 * P4) +
-#                     (P1 * dP2 * 0 * P3 * P4) +
-#                     (P1 * P2 * dP3 * 1 * P4) +
-#                     (P1 * P2 * P3 * dP4 * 0)
-        
-#         dN_dζ_val = (dP1 * (-1) * P2 * P3 * P4) +
-#                     (P1 * dP2 * 0 * P3 * P4) +
-#                     (P1 * P2 * dP3 * 0 * P4) +
-#                     (P1 * P2 * P3 * dP4 * 1)
-        
-#         dN_dξ[idx] = dN_dξ_val
-#         dN_dη[idx] = dN_dη_val
-#         dN_dζ[idx] = dN_dζ_val
-#     end
-
-#     return N, dN_dξ, dN_dη, dN_dζ
-# end
-
-# # Dispatch functions remain the same
-# function shape_functions(::Tet4, ξ::T, η::T, ζ::T) where T<:Real
-#     return shapeFunctions_TetN(ξ, η, ζ, 1)
-# end
-# function shape_functions(::Tet10, ξ::T, η::T, ζ::T) where T<:Real
-#     return shapeFunctions_TetN(ξ, η, ζ, 2)
-# end
-# function shape_functions(::Tet20, ξ::T, η::T, ζ::T) where T<:Real
-#     return shapeFunctions_TetN(ξ, η, ζ, 3)
-# end
-# function shape_functions(::Tet35, ξ::T, η::T, ζ::T) where T<:Real
-#     return shapeFunctions_TetN(ξ, η, ζ, 4)
-# end
-# function shape_functions(::Tet56, ξ::T, η::T, ζ::T) where T<:Real
-#     return shapeFunctions_TetN(ξ, η, ζ, 5)
-# end
+shape_functions(::Tet4,  ξ::T, η::T, ζ::T) where {T<:Real} = shape_functions_TetN(ξ, η, ζ, Val(1))
+shape_functions(::Tet10, ξ::T, η::T, ζ::T) where {T<:Real} = shape_functions_TetN(ξ, η, ζ, Val(2))
+shape_functions(::Tet20, ξ::T, η::T, ζ::T) where {T<:Real} = shape_functions_TetN(ξ, η, ζ, Val(3))
+shape_functions(::Tet35, ξ::T, η::T, ζ::T) where {T<:Real} = shape_functions_TetN(ξ, η, ζ, Val(4))
+shape_functions(::Tet56, ξ::T, η::T, ζ::T) where {T<:Real} = shape_functions_TetN(ξ, η, ζ, Val(5))

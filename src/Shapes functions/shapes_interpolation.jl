@@ -79,93 +79,61 @@ include("Tet_shapes.jl")
     References
     Zienkiewicz, O.C. & Taylor, R.L. (2005). "The Finite Element Method"
 """
+const ELEMENT_SYMBOL_MAP = Dict{Symbol, AbstractElementType}(
+    # Triangles
+    :Tri3  => Tri3(),
+    :Tri6  => Tri6(),
+    :Tri10 => Tri10(),
+    :Tri15 => Tri15(),
+    :Tri21 => Tri21(),
+    # Hexahedra
+    :Hex8   => Hex8(),
+    :Hex27  => Hex27(),
+    :Hex64  => Hex64(),
+    :Hex125 => Hex125(),
+    :Hex216 => Hex216(),
+    # Tetrahedra
+    :Tet4  => Tet4(),
+    :Tet10 => Tet10(),
+    :Tet20 => Tet20(),
+    :Tet35 => Tet35(),
+    :Tet56 => Tet56(),
+    # Quadrilaterals
+    :Quad4  => Quad4(),
+    :Quad9  => Quad9(),
+    :Quad16 => Quad16(),
+    :Quad25 => Quad25(),
+    :Quad36 => Quad36(),
+    # Pyramids
+    :Pyr5  => Pyr5(),
+    :Pyr14 => Pyr14(),
+    :Pyr29 => Pyr29(), 
+    :Pyr50 => Pyr50(), 
+    # Lines
+    :Lin2 => Lin2(),
+    :Lin3 => Lin3(),
+    :Lin4 => Lin4(),
+    :Lin5 => Lin5(),
+    :Lin6 => Lin6(),
+    # Prisms
+    :Pri6  => Pri6(),
+    :Pri18 => Pri18(),
+    :Pri36 => Pri36(), 
+    :Pri56 => Pri56(), 
+    :Pri78 => Pri78()  
+)
 function shape_functions(element_type::Symbol, args...)
-    if element_type == :Tri3
-        shape_functions(Tri3(), args...)
-    elseif element_type == :Tri6
-        shape_functions(Tri6(), args...)
-    elseif element_type == :Tri10
-        shape_functions(Tri10(), args...)
-    elseif element_type == :Tri15
-        shape_functions(Tri15(), args...)
-    elseif element_type == :Tri21
-        shape_functions(Tri21(), args...)
-    elseif element_type == :Hex8
-        shape_functions(Hex8(), args...)
-    elseif element_type == :Hex27
-        shape_functions(Hex27(), args...)
-    elseif element_type == :Hex64
-        shape_functions(Hex64(), args...)
-    elseif element_type == :Hex125
-        shape_functions(Hex125(), args...)
-    elseif element_type == :Hex216
-        shape_functions(Hex216(), args...)    
-    elseif element_type == :Tet4
-        shape_functions(Tet4(), args...)
-    elseif element_type == :Tet10
-        shape_functions(Tet10(), args...)
-    elseif element_type == :Tet20
-        shape_functions(Tet20(), args...)
-    elseif element_type == :Tet35
-        shape_functions(Tet35(), args...)
-    elseif element_type == :Tet56
-        shape_functions(Tet56(), args...)
-    elseif element_type == :Quad4
-        shape_functions(Quad4(), args...)
-    elseif element_type == :Quad8
-        shape_functions(Quad8(), args...)
-    elseif element_type == :Quad9
-        shape_functions(Quad9(), args...)
-    elseif element_type == :Quad16
-        shape_functions(Quad16(), args...)
-    elseif element_type == :Quad25
-        shape_functions(Quad25(), args...)
-    elseif element_type == :Quad36        
-        shape_functions(Quad36(), args...)        
-    elseif element_type == :Pyr5
-        shape_functions(Pyr5(), args...)
-    elseif element_type == :Pyr14
-        shape_functions(Pyr14(), args...)
-    elseif element_type == :Pyr29
-        shape_functions(Pyr29(), args...)
-    elseif element_type == :Pyr50
-        shape_functions(Pyr50(), args...)
-    elseif element_type == :Pyr77
-        shape_functions(Pyr77(), args...)
-    elseif element_type == :Lin1
-        shape_functions(Lin1(), args...)
-    elseif element_type == :Lin2
-        shape_functions(Lin2(), args...)
-    elseif element_type == :Lin3
-        shape_functions(Lin3(), args...)
-    elseif element_type == :Lin4
-        shape_functions(Lin4(), args...)
-    elseif element_type == :Lin5
-        shape_functions(Lin5(), args...)
-    elseif element_type == :Lin6
-        shape_functions(Lin6(), args...)
-    elseif element_type == :Pri6
-        shape_functions(Pri6(), args...)
-    elseif element_type == :Pri18
-        shape_functions(Pri18(), args...)
-    elseif element_type == :Pri36
-        shape_functions(Pri36(), args...)
-    elseif element_type == :Pri56
-        shape_functions(Pri56(), args...)
-    elseif element_type == :Pri78
-        shape_functions(Pri78(), args...)
-    else
+    # Look up the element type instance from the map.
+    # The `get` function provides a way to handle cases where the symbol is not found.
+    element_instance = get(ELEMENT_SYMBOL_MAP, element_type, nothing)
+
+    if element_instance === nothing
         error("""
         Unsupported element type: $element_type
-        Valid options: 
-        - Triangular: :Tri3, :Tri6, :Tri10, :Tri15, :Tri21
-        - Hexahedral: :Hex8, :Hex27, :Hex64, :Hex125, :Hex216
-        - Tetrahedral: :Tet4, :Tet10, :Tet20, :Tet35, :Tet56
-        - Quadrilateral: :Quad4, :Quad9, :Quad16, :Quad25, :Quad36
-        - Pyramid: :Pyr5, :Pyr14, :Pyr29, :Pyr50, :Pyr77
-        - Prism: :Pri6, :Pri18, :Pri36, :Pri56, :Pri78
-        - Linear: :Lin2, :Lin3, :Lin4, :Lin5, :Lin6
+        Please ensure it is one of the supported types and is defined in the ELEMENT_SYMBOL_MAP.
         """)
     end
+
+    # This call is now type-stable because Julia's dispatch system takes over.
+    return shape_functions(element_instance, args...)
 end
-  
