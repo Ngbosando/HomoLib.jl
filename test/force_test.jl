@@ -4,7 +4,7 @@ using CairoMakie
 using LinearAlgebra, SparseArrays, Statistics
 using Test
 using StaticArrays
-using Revise
+
 
 function compute_energy(nx, ny, element_type)
 

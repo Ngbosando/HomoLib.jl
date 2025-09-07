@@ -123,6 +123,11 @@ end
 ```
 
 ### 5.2 Visualization
+### Figure 1: Convergence
+![Convergence history](/docs/images/topology_optimization_cantilever/compliance_history.png)
+
+### Figure 2: Sensibilité
+![Final structure](/docs/images/topology_optimization_cantilever/Final_state.png)
 
 ```julia
 
@@ -167,7 +172,7 @@ function write_vtk_results(iter, nodes, elems, ρ_vec)
 ```
 ---
 
-## 10. Conclusion: 
+## 8. Conclusion: 
 
 Cette implémentation est un **bon point de départ pratique** pour l’optimisation topologique ::
 

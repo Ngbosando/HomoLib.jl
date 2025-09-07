@@ -16,9 +16,9 @@
 #'
 #' The results are compared against the theoretical Voigt and Hashin-Shtrikman bounds.
 #'
-#'--------------------------------------------------------------------------------
+#'--
 #' Imports and Configuration
-#'--------------------------------------------------------------------------------
+#'--
 using Revise
 using HomoLib
 using CairoMakie
@@ -26,9 +26,9 @@ using LinearAlgebra
 using Statistics
 using Printf
 #'
-#'--------------------------------------------------------------------------------
+#'--
 #'Data Structures
-#'--------------------------------------------------------------------------------
+#'--
 mutable struct MeshData
     nodes::Matrix{Float64}
     elements::Matrix{Int}
@@ -45,9 +45,9 @@ mutable struct ElemData
     order::Int
 end
 #'
-#'--------------------------------------------------------------------------------
+#'--
 #'Core Analysis Functions
-#--------------------------------------------------------------------------------
+#--
 #'
 function setup_mesh(; width, height, volume_fraction,
                       n_inclusions, elem_data::ElemData,
@@ -295,11 +295,9 @@ function plot_convergence_study(
         ax_m.title = titles[i]
         ax_s.title = titles[i]
 
-        # Set x-axis ticks to show all realization points
         ax_m.xticks = realizations
         ax_s.xticks = realizations
-        
-        # Rotate x-tick labels to avoid overlap with many realizations
+
         ax_m.xticklabelrotation = π/4
         ax_s.xticklabelrotation = π/4
 
@@ -319,21 +317,17 @@ function plot_convergence_study(
 end
 #'
 function compute_theoretical_bounds(vf_values, C_matrix)
-    #'--- helpers ---------------------------------------------------------
     #'extract effective bulk (κ) and shear (μ) from your 2D C-matrix convention
-    #'NOTE: this assumes C_matrix[1,1] == C1111 and C_matrix[3,3] == C1212 (shear)
     κ_m = C_matrix[1,1] - (4.0/3.0)*C_matrix[3,3]
     μ_m = C_matrix[3,3]
     
     #'Extract ν_matrix for Mori-Tanaka
     ν_matrix = (3*κ_m - 2*μ_m) / (2*(3*κ_m + μ_m))
 
-    #'phase 2 = inclusion / void; user may pass near-zero stiffness or proper C for inclusions
-    #'we'll accept that inclusions are zero-stiffness: κ_i = 0, μ_i = 0 when necessary
+    #'phase 2 = inclusion / void; 
     κ_i = 0.0
     μ_i = 0.0
 
-    #'safe reciprocal helper
     safe_inv(x; tol=1e-12) = abs(x) < tol ? sign(x)/tol : 1.0/x
 
     #'Voigt & Reuss for bulk and shear
@@ -348,7 +342,7 @@ function compute_theoretical_bounds(vf_values, C_matrix)
         return κV, μV, κR, μR
     end
 
-    #'robust Hashin-Shtrikman (returns κ_lower, μ_lower, κ_upper, μ_upper)
+    #' Hashin-Shtrikman (returns κ_lower, μ_lower, κ_upper, μ_upper)
     function hashin_shtrikman_safe(κ1, μ1, κ2, μ2, f2; tol=1e-12)
         f1 = 1.0 - f2
 
@@ -376,21 +370,21 @@ function compute_theoretical_bounds(vf_values, C_matrix)
         return κ_lower, μ_lower, κ_upper, μ_upper
     end
 
-    #'map (κ, μ) -> components used in plotting
+ 
     C1111 = (κ, μ) -> κ + (4.0/3.0)*μ
     C1122 = (κ, μ) -> κ - (2.0/3.0)*μ
     C1212 = (κ, μ) -> μ
 
-    #'--- allocate outputs ------------------------------------------------
+
     vf = collect(vf_values)
     n = length(vf)
     voigt = Dict(k => zeros(n) for k in (:c1111,:c1122,:c1212))
     reuss = Dict(k => zeros(n) for k in (:c1111,:c1122,:c1212))
     hs_low = Dict(k => zeros(n) for k in (:c1111,:c1122,:c1212))
     hs_up  = Dict(k => zeros(n) for k in (:c1111,:c1122,:c1212))
-    mt = Dict(k => zeros(n) for k in (:c1111,:c1122,:c1212))  #'ADDED: Mori-Tanaka
+    mt = Dict(k => zeros(n) for k in (:c1111,:c1122,:c1212))  
 
-    #'inclusion moduli (we assume voids; change if you have actual inclusion C)
+    
     κ2 = κ_i
     μ2 = μ_i
     κ1 = κ_m
@@ -400,7 +394,7 @@ function compute_theoretical_bounds(vf_values, C_matrix)
         κV, μV, κR, μR = voigt_reuss(κ1, μ1, κ2, μ2, f)
         kll, mll, kuu, muu = hashin_shtrikman_safe(κ1, μ1, κ2, μ2, f)
         
-        #'ADDED: Mori-Tanaka for spherical voids
+      
         κ_mt = κ1 * (1 - f) / (1 + 3*(1-ν_matrix)/(2*(1-2*ν_matrix)) * f)
         μ_mt = μ1 * (1 - f) / (1 + (15*(1-ν_matrix))/(7-5*ν_matrix) * f)
 
@@ -426,23 +420,7 @@ function compute_theoretical_bounds(vf_values, C_matrix)
         mt[:c1212][i] = C1212(κ_mt, μ_mt)
     end
 
-    return (voigt=voigt, reuss=reuss, hs_lower=hs_low, hs_upper=hs_up, mori_tanaka=mt)  #'ADDED: mori_tanaka
-end
-#'
-function get_matrix_C(E_matrix, ν_matrix; plane_stress=true)
-    if plane_stress
-        factor = E_matrix / (1 - ν_matrix^2)
-        C11 = factor
-        C12 = ν_matrix * factor
-        C33 = E_matrix / (2*(1 + ν_matrix))
-        return [C11 C12 0; C12 C11 0; 0 0 C33]
-    else
-        factor = E_matrix / ((1 + ν_matrix) * (1 - 2*ν_matrix))
-        C11 = factor * (1 - ν_matrix)
-        C12 = factor * ν_matrix
-        C33 = factor * (1 - 2*ν_matrix) / 2
-        return [C11 C12 0; C12 C11 0; 0 0 C33]
-    end
+    return (voigt=voigt, reuss=reuss, hs_lower=hs_low, hs_upper=hs_up, mori_tanaka=mt)  
 end
 #'
 function plot_sensitivity_results(
@@ -537,15 +515,13 @@ function plot_sensitivity_results(
 end
 #'
 function plot_constitutive_law(vf_values, means_std, means_contact, target_vf::Float64)
-    #'Find the index closest to the target volume fraction
+    
     idx = argmin(abs.(vf_values .- target_vf))
     vf_target = vf_values[idx]
     
-    #'Extract the constitutive tensors at the target volume fraction
     C_std = means_std.c1111[idx], means_std.c2222[idx], means_std.c1122[idx], means_std.c1212[idx]
     C_contact = means_contact.c1111[idx], means_contact.c2222[idx], means_contact.c1122[idx], means_contact.c1212[idx]
     
-    #'Convert to matrix format for compatibility
     C_std_matrix = [C_std[1] C_std[3] 0; C_std[3] C_std[2] 0; 0 0 C_std[4]]
     C_contact_matrix = [C_contact[1] C_contact[3] 0; C_contact[3] C_contact[2] 0; 0 0 C_contact[4]]
     
@@ -553,7 +529,6 @@ function plot_constitutive_law(vf_values, means_std, means_contact, target_vf::F
     Label(fig[1, 1:2], "Effective Asymmetric Constitutive Law (ϕ = $(round(vf_target*100, digits=1))% Porosity)", 
           fontsize=24, font=:bold, padding=(0,0,20,0))
     
-    #'Create all axes explicitly
     axes = [
         Axis(fig[2, 1]),
         Axis(fig[2, 2]),
@@ -606,7 +581,7 @@ function plot_constitutive_law(vf_values, means_std, means_contact, target_vf::F
     return fig
 end
 #'
-#' ---
+#' 
 #' ##'Analysis Execution
 #'
 #' We now define the simulation parameters and run the studies.
@@ -701,7 +676,7 @@ fig_constitutive
 #'
 #'
 #'Also create summary table
-println("\n --- Summary Results for ϕ = $(target_vf*100)% Volume Fraction ---")
+println("\n  Summary Results for ϕ = $(target_vf*100)% Volume Fraction ")
 #'
 #'Find the index closest to target porosity
 idx = argmin(abs.(vf_values .- target_vf))
@@ -709,7 +684,7 @@ mean_C_std_at_target = [means_std.c1111[idx], means_std.c2222[idx], means_std.c1
 mean_C_contact_at_target = [means_contact.c1111[idx], means_contact.c2222[idx], means_contact.c1122[idx], means_contact.c1212[idx]]
 #'
 @printf "Component | Standard (GPa) | Contact (GPa) | Difference (%%)\n"
-@printf "----------|----------------|---------------|----------------\n"
+@printf "-|-||-\n"
 comps = ["C₁₁₁₁", "C₂₂₂₂", "C₁₁₂₂", "C₁₂₁₂"];
 for i in 1:4
     std_val = mean_C_std_at_target[i]

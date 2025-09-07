@@ -10,7 +10,7 @@ using CairoMakie, GeometryBasics
 using LinearAlgebra, SparseArrays, Statistics
 using WriteVTK
 
-# Helper Functions -
+
 function get_center_node(nodes, boundary_nodes)
     boundary_coords = nodes[boundary_nodes, :]
     center_coord = mean(boundary_coords, dims=1)
@@ -143,9 +143,9 @@ function fill_mech_dofs!(out::AbstractVector{<:Integer},
     NN = length(conn)
     d  = Int(dim)
     @inbounds for a in 1:NN
-        node = Int(conn[a])         # 1-based node id
-        base = (node - 1) * d       # global node-wise base dof
-        i0   = (a - 1) * d          # element-local offset
+        node = Int(conn[a])         
+        base = (node - 1) * d      
+        i0   = (a - 1) * d         
         out[i0 + 1] = base + 1
         if d >= 2; out[i0 + 2] = base + 2; end
         if d >= 3; out[i0 + 3] = base + 3; end
@@ -193,9 +193,7 @@ function topology_optimization_CB()
     exponent_counter = 0
     old_compliance = Inf
 
-    #  FEM Precompute (new convention) 
-    # NOTE: use the new geometric precompute once; re-use every iteration.
-    #       For SIMP, only C changes via material interpolation.
+
     Geometric_Data = precompute_geometric_data(
         element_type, int_order, dim,
         elems, nodes, ElasticMaterial(2, E=E, ν=ν)
@@ -313,10 +311,10 @@ function topology_optimization_CB()
 
     fig = plot_density(nodes, elems, ρ_vec, "Final Density")
     # display(fig)
-    return ρ_vec, compliance_history
+    return ρ_vec, compliance_history, fig
 end
 
-ρ_opt, compliance_hist = topology_optimization_CB();
+ρ_opt, compliance_hist , fig= topology_optimization_CB();
 
 
 
