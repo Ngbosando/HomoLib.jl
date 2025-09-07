@@ -10,7 +10,7 @@ using CairoMakie, GeometryBasics
 using LinearAlgebra, SparseArrays, Statistics
 using WriteVTK
 
-# Helper Functions -------------------------------------------------------------
+# Helper Functions -
 function get_center_node(nodes, boundary_nodes)
     boundary_coords = nodes[boundary_nodes, :]
     center_coord = mean(boundary_coords, dims=1)
@@ -152,7 +152,7 @@ function fill_mech_dofs!(out::AbstractVector{<:Integer},
     end
     return nothing
 end
-# Main Optimization Function ---------------------------------------------------
+# Main Optimization Function 
 function topology_optimization_CB()
     # Problem Parameters
     b = 6.0    # Width
@@ -193,7 +193,7 @@ function topology_optimization_CB()
     exponent_counter = 0
     old_compliance = Inf
 
-    # --- FEM Precompute (new convention) ---
+    #  FEM Precompute (new convention) 
     # NOTE: use the new geometric precompute once; re-use every iteration.
     #       For SIMP, only C changes via material interpolation.
     Geometric_Data = precompute_geometric_data(
@@ -240,7 +240,7 @@ function topology_optimization_CB()
             end
         end
 
-        # --- Sensitivity Analysis (no assemble_global_dofs) ---
+        #  Sensitivity Analysis (no assemble_global_dofs) 
         dC = zeros(n_elem)
 
         # Reuse the already built geometric data

@@ -1,54 +1,46 @@
-# Finite Element Analysis of Composite Materials using HomoLib.jl
+# Analyse par éléments finis des matériaux composites avec HomoLib.jl
 
-## Executive Summary
+## Résumé
 
-This document presents a comprehensive numerical analysis framework for determining the effective mechanical properties of composite materials using the Finite Element Method (FEM). The analysis employs the HomoLib.jl package to perform homogenization of Representative Volume Elements (RVEs) containing randomly distributed square inclusions.
+Ce document présente un cadre numérique pour calculer les propriétés effectives de matériaux composites à l’aide de la méthode des éléments finis (MEF). L’analyse s’appuie sur la bibliothèque HomoLib.jl pour réaliser l’homogénéisation de volume élémentaire représentatifs (VER) contenant des inclusions rectangulaire réparties aléatoirement.
 
-### Key Features
-- **Model Comparison**: Standard elastic model vs. contact interface model
-- **Statistical Convergence Analysis**: Determines optimal number of realizations
-- **Sensitivity Studies**: Explores volume fraction effects on effective properties
-- **Theoretical Validation**: Comparison with Voigt, Hashin-Shtrikman, and Mori-Tanaka bounds
+### Points clés
+- **Comparaison de modèles**: modèle élastique standard vs. modèle avec interface de contact
+- **Analyse de convergence statistique**: pour déterminer le nombre optimal de simulations nécessaires
+- **Études de sensibilité**: effet de la fraction volumique sur les propriétés effectives
+- **Validation théorique**: comparaison avec les bornes de Voigt, Hashin-Shtrikman et Mori-Tanaka
 
 ---
 
 ## 1. Introduction
-The composite is characterized by a 2-phase micro-structure. Each phase is linear elastic isotropic
-with different coefficients for each phase. The inclusions are assumed perfectly square, and their
-position is distributed according to a uniform probability law with the exclusion of superposition
-of inclusions.
+Le composite étudié est constitué d’une microstructure biphasée. Chaque phase est isotrope, linéairement élastique, avec des propriétés différentes. Les inclusions sont supposées parfaitement rectangulaire, et leur position suit une loi de probabilité uniforme, sans chevauchement.
 
-### 1.1 Objective
-The primary goal is to characterize the effective elastic properties of heterogeneous materials with soft inclusions (or voids) through computational homogenization. This analysis is particularly relevant for:
-- Porous materials
-- Particle-reinforced composites
-- Materials with damage or voids
-- Soft inclusion composites
+### 1.1 Objectif
+Déterminer les propriétés élastiques effectives de matériaux hétérogènes avec inclusions molles (ou vides) par homogénéisation numérique.
 
-### 1.2 Methodology Overview
-We perform two complementary studies:
+### 1.2 Méthodologie
+Deux études complémentaires :
 
-1. **Convergence Study**: Establishes the minimum number of random RVE realizations required for statistically stable results
-2. **Sensitivity Analysis**: Investigates the relationship between inclusion volume fraction and effective stiffness
+1. **Convergence statistique**: nombre minimal de réalisations RVE nécessaires pour obtenir des résultats fiables
+2. **Analyse de sensibilité**: lien entre la fraction volumique des inclusions et la rigidité effective
 
-### 1.3 Physical Models
+### 1.3 Modèles physiques
 
-#### Standard Elastic Model
-- Assumes perfect bonding between matrix and inclusions
-- Both tension and compression treated identically
-- Linear elastic behavior throughout
-- Interface are consider perfect
+#### Modèle élastique
+- Parfait collage matrice/inclusion
+- Comportement identique en traction et compression
+- Elasticité linéaire
+- Interfaces supposées parfaites
 
 #### Contact Interface Model
-- Accounts for potential debonding at matrix-inclusion interfaces
-- Asymmetric response in tension vs compression
-- More realistic for materials voids
+- Réponse différente en traction et en compression
+- Plus réaliste pour les matériaux poreux
 
 ---
 
-## 2. Implementation
+## 2. Implémentation
 
-### 2.1 Dependencies and Configuration
+### 2.1 Dépendances
 
 ```julia
 using Revise
@@ -59,10 +51,10 @@ using Statistics
 using Printf
 ```
 
-### 2.2 Data Structures
+### 2.2 Structures
 
-#### MeshData Structure
-Stores all mesh-related information:
+#### MeshData 
+Stocke toutes les infos du maillage:
 ```julia
 mutable struct MeshData
     nodes::Matrix{Float64}           # Nodal coordinates [x, y]
@@ -75,8 +67,8 @@ mutable struct MeshData
 end
 ```
 
-#### ElemData Structure
-Defines element properties:
+#### ElemData 
+Définit les propriétés des éléments:
 ```julia
 mutable struct ElemData
     type::Symbol        # Element type (:Tri3, :Tri6, :Quad4, etc.)
@@ -85,84 +77,69 @@ mutable struct ElemData
 end
 ```
 
-### 2.3 Core Analysis Functions
+### 2.3 Fonctions
 
-#### Mesh Generation
-The `setup_mesh` function creates an RVE with randomly distributed inclusions:
-- Generates transfinite mesh with specified refinement
-- Places inclusions randomly while avoiding overlap
-- Applies periodic boundary conditions for homogenization
-
-#### Standard Elastic Analysis
-Implements classical FEM with:
-- Symmetric stiffness response
-- Perfect interface assumption
-- Three loading cases for full tensor characterization
-
-#### Contact Interface Analysis
-Model featuring:
-- Interface elements at inclusion boundaries
-- Asymmetric stiffness in tension/compression
+- **Génération de maillage** : création d’un VER avec inclusions aléatoires, maillage raffiné, conditions périodiques (GMSH)
+- **Analyse élastique standard** : MEF, interfaces parfaites, trois chargements pour caractérisation complète 
+- **Analyse avec contact** : Décomposition spectrale et énergétique
 
 ---
 
-## 3. Simulation Parameters
+## 3. Paramètres de simulation
 
-### 3.1 Numerical Settings
+### 3.1 Données statistique
 
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| `n_realizations` | 30 | Number of random RVE configurations per data point |
-| `n_samples` | 5 | Number of volume fraction points for sensitivity |
-| `max_conv_real` | 50 | Maximum realizations for convergence study |
-| `n_conv_steps` | 10 | Sampling points in convergence study |
+| Paramètre        | Valeur | Description                            |
+| ---------------- | ------ | -------------------------------------- |
+| `n_realizations` | 30     | Nombre de configurations RVE par point |
+| `n_samples`      | 5      | Points de fraction volumique           |
+| `max_conv_real`  | 50     | Réalisations max pour convergence      |
+| `n_conv_steps`   | 10     | Points d’échantillonnage               |
 
-### 3.2 RVE Configuration
 
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| `volume_fraction` | 0.4 & 0.6 | Target porosity (40% and 60%) for detailed analysis |
-| `n_inclusions` | 10 | Number of square inclusions per RVE |
-| `element_order` | 2 | Quadratic elements (6-node triangles) |
-| `shape` | :square | Inclusion geometry |
-| `element_type` | :Tri6 | 6-node triangular elements |
-| `node_div_inc` | 10 | Mesh divisions around inclusions |
-| `node_div_mat` | 20 | Mesh divisions in matrix |
+### 3.2 Configuration VER
 
-### 3.3 Material Properties
+| Paramètre         | Valeur    | Description                       |
+| ----------------- | --------- | --------------------------------- |
+| `volume_fraction` | 0.4 & 0.6 | Porosité cible (40 % et 60 %)     |
+| `n_inclusions`    | 10        | Nombre d’inclusions               |
+| `element_order`   | 2         | Éléments quadratiques             |
+| `shape`           | :square   | Forme des inclusions              |
+| `element_type`    | :Tri6     | Triangles à 6 nœuds               |
+| `node_div_inc`    | 10        | Raffinement autour des inclusions |
+| `node_div_mat`    | 20        | Raffinement matrice               |
 
-| Material | Young's Modulus (GPa) | Poisson's Ratio | Notes |
-|----------|----------------------|-----------------|-------|
-| Matrix | 30.0 | 0.3 | Base material |
-| Inclusion | 1×10⁻¹⁰ | 1×10⁻¹⁰ | Near-zero stiffness (void-like) |
+
+### 3.3 Propriétés matériaux
+
+| Matériau  | E (GPa) | ν       | Remarques                   |
+| --------- | ------- | ------- | --------------------------- |
+| Matrice   | 30.0    | 0.3     | Matériau de base            |
+| Inclusion | 1×10⁻¹⁰ | 1×10⁻¹⁰ | Rigidité quasi nulle (vide) |
 
 ---
 
-## 4. Results and Analysis
+## 4. Résultats et analyse
 
-### 4.1 Convergence Study Results
+### 4.1 Convergence
 
-The convergence study demonstrates that:
-- **Mean values stabilize** after approximately 15-20 realizations
-- **Standard deviations converge** at the same, requiring 15+ realizations for stability
-- **Contact model** shows slightly higher variability than standard model
+- Moyennes stables dès 15–20 réalisations
+- Écarts-types convergent au même rythme
+- Le modèle contact montre un peu plus de variabilité
 
 ### 4.2 Sensitivity Analysis Results
 
-The sensitivity analysis reveals:
-- **Linear degradation** of stiffness with increasing porosity
-- Results fall within theoretical bounds (Hashin-Shtrikman)
-- Good agreement with Mori-Tanaka model for spherical voids
+- Rigidité diminue quasi linéairement avec la porosité
+- Accord avec Mori-Tanaka en fraction volumique moyen (0.2-0.4)
 
 ### 4.3 Constitutive Behavior Comparison
-The Contact model incorporates interface mechanics that cause its stiffness predictions to differ from the Standard model, with the effects depending on porosity and load type.
 
-- At 40% Porosity : The model predicts a softer response under compression, and reduces shear and off-axis stiffness by 4-5% 
+- **À 40 % porosité** : réponse plus molle en compression, rigidité cisaillement réduite (~5 %)
 
--At 55% Porosity : The main differences occur under tension. The Contact model shows that interface opening softens the material (~2.6%), but the resulting structural rearrangement causes a significant shear stiffening of over 7%.
+- **À 55 % porosité** : ouverture d’interface adoucit la traction (~2.6 %), mais provoque un renforcement cisaillement >7 %
 
-### 4.4 Summary Table 
-### 4.4.1 40% Porosity
+### 4.4 Résumés
+### 4.4.1 40% porosité
 | Component | Standard (GPa) | Contact (GPa) | Difference (%) |
 |-----------|---------------|---------------|----------------|
 | C₁₁₁₁ | 10.8714 | 10.8899 | +0.17 |
@@ -178,59 +155,57 @@ The Contact model incorporates interface mechanics that cause its stiffness pred
 | C₁₂₁₂ | 1.9675 | 2.1185 | +7.67 |
 ---
 
-## 5. Theoretical Bounds Comparison
+## 5. Comparaison avec les bornes théoriques
 
-### 5.1 Implemented Bounds
+### 5.1 Implémentation 
 
-1. **Voigt (Upper) Bound**: assumes uniform strain
-2. **Hashin-Shtrikman Bounds**: Tighter bounds based on variational principles
-3. **Mori-Tanaka Model**: Mean-field approximation for dilute inclusions
+1. **Voigt (borne sup)**
+2. **Hashin-Shtrikman**
+3. **Mori-Tanaka**
 
-### 5.2 Validation Results
+### 5.2 Résultats
 
 The numerical results successfully:
-- Remain within Voigt bounds (as required theoretically)
-- Fall close to Hashin-Shtrikman bounds 
-- Show excellent agreement with Mori-Tanaka for moderate volume fractions
-
+- Restent en dessous de la borne de Voigt (logique)
+- Proches de Hashin-Shtrikman, à certaines porosités.
+- Excellente cohérence avec Mori-Tanaka (fractions modérées).
 ---
 
-## 6. Visualization Outputs
+## 6. Visualisations
 
-The analysis generates three key figures:
 
-### Figure 1: Convergence Study
+### Figure 1: Convergence
 ![Convergence Study: Stiffness evolution and standard deviation convergence](/docs/images/sensitivity_analysis/convergence_study.png)
-- Top row: Evolution of mean stiffness components
-- Bottom row: Convergence of standard deviations
-- Comparison between standard (blue) and contact (red) models
+- Haut : évolution de la rigidité moyenne
+- Bas : convergence des écarts-types
+- Comparaison entre modèle standard (bleu) et modèle contact (rouge)
 
-### Figure 2: Sensitivity Analysis
+### Figure 2: Sensibilité
 ![Sensitivity Analysis: Stiffness components with 95% confidence intervals](/docs/images/sensitivity_analysis/sensitivity_analysis.png)
-- Four subplots for each stiffness component
-- Error bars showing 95% confidence intervals
-- Theoretical bounds overlaid for validation
+- Quatre sous-graphes pour chaque composant de rigidité
+- Barres d’erreur avec intervalles de confiance à 95 %
+- Bornes théoriques tracées en référence
 
-### Figure 3: Constitutive Law
+### Figure 3: Loi de comportement
 ![Constitutive Law: Stress-strain relationships for 40% porosity](/docs/images/sensitivity_analysis/constitutive_law_40percent.png)
 ![Constitutive Law: Stress-strain relationships for 55% porosity](/docs/images/sensitivity_analysis/constitutive_law_60percent.png)
-- Stress-strain relationships for 40% & 55% porosity
-- Demonstrates asymmetric behavior in contact model
-- Includes uniaxial, shear, and Poisson effects
+- Courbes contrainte–déformation pour porosités 40 % et 55 %
+- Mise en évidence de l’asymétrie
+- Cas étudiés : traction, cisaillement et effet de Poisson
 
 ---
 
 ## 7. Conclusions
 
-1. **Statistical Convergence**: 30 realizations provide adequate statistical stability for engineering purposes
-2. **Model Comparison**: Contact model predicts 5-10% reduction/increase in stiffness versus standard model
+1. 30 réalisations suffisent pour une bonne stabilité statistique
+2. Le modèle contact modifie la rigidité de 5–10 % selon la porosité
 depending on the volume fraction consider
-3. **Theoretical Agreement**: Numerical results align well with analytical bounds
-4. **Asymmetric Response**: Contact model successfully captures tension-compression asymmetry
+3. Les résultats numériques collent bien aux bornes théoriques
+4. L’asymétrie traction/compression est correctement capturée
 
 ---
 
-## 8. Code Repository and Usage
+## 8. Utilisation du code
 
 ### Installation
 ```julia
@@ -238,7 +213,7 @@ using Pkg
 Pkg.add("HomoLib")
 ```
 
-### Basic Usage Example
+### Exemple minimal
 ```julia
 # Define material properties
 E_matrix, ν_matrix = 30.0, 0.3
@@ -253,14 +228,14 @@ C_effective = compute_effective_C(
 )
 ```
 
-### Output Files
+### Fichiers générés
 - `convergence_study.png`: Statistical convergence analysis
 - `sensitivity_analysis.png`: Volume fraction sensitivity
 - `constitutive_law_$X$percent.png`: Asymmetric stress-strain behavior
 
 ---
 
-## References
+## Références
 
 For more information on the theoretical background and implementation details, please refer to:
 - HomoLib.jl documentation
@@ -268,4 +243,3 @@ For more information on the theoretical background and implementation details, p
 - C. Miehe and M. Lambrecht. Algorithms for computation of stresses and elasticity moduli in terms of seth-hill’s family of generalized strain tensors.
 ---
 
-*This page was generated using [Literate.jl](https://github.com/fredrikekre/Literate.jl).*
