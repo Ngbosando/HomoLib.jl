@@ -1,4 +1,4 @@
-# ==== Spectral Decomposition & Energies (Consistent Voigt Convention) ====
+#  Spectral Decomposition & Energies (Consistent Voigt Convention)
 
 """
     get_strain_matrix(ε)

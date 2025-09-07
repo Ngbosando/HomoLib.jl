@@ -295,6 +295,14 @@ function plot_convergence_study(
         ax_m.title = titles[i]
         ax_s.title = titles[i]
 
+        # Set x-axis ticks to show all realization points
+        ax_m.xticks = realizations
+        ax_s.xticks = realizations
+        
+        # Rotate x-tick labels to avoid overlap with many realizations
+        ax_m.xticklabelrotation = π/4
+        ax_s.xticklabelrotation = π/4
+
         lines!(ax_m, realizations, [m[i] for m in means_std], color=:blue, label="Standard")
         scatter!(ax_m, realizations, [m[i] for m in means_std], color=:blue)
         lines!(ax_s, realizations, [s[i] for s in stds_std], color=:blue, label="Standard")
@@ -605,24 +613,23 @@ end
 #'
 #' 
 #' Simulation Parameters
-n_realizations = 50
-n_samples = 10
+n_realizations = 30
+n_samples = 5
 max_conv_real = 100 
 n_conv_steps = 10
 #'
 #'RVE Parameters
-volume_fraction = 0.6 #'60% porosity for final plot
 n_inclusions = 10
 element_order = 2
 shape = :circle
 element_type = :Tri6
-node_div_inc = 15
-node_div_mat = 25
+node_div_inc = 10
+node_div_mat = 20
 #'
 #'Material Properties: Generic Composite with Soft Inclusions
 #'Units are in GPa.
-E_matrix, ν_matrix = 1.0, 0.3
-E_inclusion, ν_inclusion = 1e-6, 0.3
+E_matrix, ν_matrix = 30.0, 0.3
+E_inclusion, ν_inclusion = 1e-10, 1e-10
 material_props = (E_matrix, ν_matrix, E_inclusion, ν_inclusion)
 #'
 #'
