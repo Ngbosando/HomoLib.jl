@@ -1,3 +1,4 @@
+[![Build Status](https://github.com/leycrimson/HomoLib.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/leycrimson/HomoLib.jl/actions/workflows/CI.yml?query=branch%3Amain)
 # HomoLib
 
 Computational homogenization and topology optimization in Julia.
@@ -33,4 +34,4 @@ Run examples to see full capabilities and generated plots.
 - SIMP topology optimization with adaptive penalization
 - Statistical convergence analysis
 - Visualization and VTK export
-[![Build Status](https://github.com/leycrimson/HomoLib.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/leycrimson/HomoLib.jl/actions/workflows/CI.yml?query=branch%3Amain)
+
