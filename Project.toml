@@ -32,7 +32,7 @@ WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
 BenchmarkTools = "1.6.0"
-CairoMakie = "0.13.4"
+CairoMakie = "0.13.4, 0.15"
 Combinatorics = "1.0.2"
 Dates = "1"
 DelaunayTriangulation = "1.6.4"
