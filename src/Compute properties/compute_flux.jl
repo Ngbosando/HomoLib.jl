@@ -32,8 +32,8 @@ end
 Storage for poroelastic field recovery results.
 """
 struct PoroelasticFieldStorage{T<:AbstractFloat}
-    stress::Matrix{T}       # [num_nodes × nstr] - effective stress
-    strain::Matrix{T}       # [num_nodes × nstr] - total strain
+    stress::Matrix{T}       # [num_nodes × nstr] - stress components
+    strain::Matrix{T}       # [num_nodes × nstr] - strain components
     pressure::Vector{T}     # [num_nodes] - pore pressure
 end
 
