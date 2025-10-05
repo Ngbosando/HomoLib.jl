@@ -13,9 +13,7 @@
 
 La référence analytique est donnée par la **solution de Kirsch** :
 
-\[
-\sigma_{\theta\theta}(r=a,\theta) = \sigma_\infty \big(1 - 2 \cos(2\theta)\big)
-\]
+σθθ(r=a,θ) = σ∞ (1 - 2 cos(2θ))
 
 ---
 
