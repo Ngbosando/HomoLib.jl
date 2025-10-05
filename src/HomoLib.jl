@@ -68,6 +68,8 @@ using Random
 using Gmsh: gmsh
 import FastGaussQuadrature.gausslegendre
 using LoopVectorization
+using GeometryBasics
+using CairoMakie
 
 abstract type AbstractMaterial end
 abstract type AbstractElementType end

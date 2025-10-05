@@ -7,7 +7,7 @@ using HomoLib: generate_transfinite_plate_with_inclusions,
                 DirichletHomogenizationBC, solve!,
                 plot_champ_scalaire, force_computation,
                 compute_effective_property,precompute_geometric_data
-                
+using HomoLib: recover_field_values              
 # Mesh generation
 
 mutable struct MeshData
@@ -379,27 +379,28 @@ function run_poro_case(mesh::MeshData, Elem::ElemData)
  
 
     # Visualization displacement and fields
-    # magn   = 0.3
-    # Ux     = U4[1:2:end]; Uy = U4[2:2:end];
-    # Nx2    = mesh.nodes[:,1] .+ Ux*magn; Ny2 = mesh.nodes[:,2] .+ Uy*magn;
-    # nodes2 = hcat(Nx2, Ny2);
-    # stress_strain = recover_field_values(
-    #     mesh.elements,
-    #     poro_mat,
-    #     (U=U4,),
-    #     mesh.type_elem, 
-    #     2,
-    #     Geometric_Data
-    # );
-    # σ₁₁, σ₂₂, σ₁₂ = stress_strain.stress[:,1], stress_strain.stress[:,2], stress_strain.stress[:,3];
-    # ϵ₁₁, ϵ₂₂, ϵ₁₂ = stress_strain.strain[:,1], stress_strain.strain[:,2], stress_strain.strain[:,3];
+  
+    
+    magn   = 0.3
+    Ux     = U4[1:2:end]; Uy = U4[2:2:end];
+    Nx2    = mesh.nodes[:,1] .+ Ux*magn; Ny2 = mesh.nodes[:,2] .+ Uy*magn;
+    nodes2 = hcat(Nx2, Ny2);
+    stress_strain = recover_field_values(
+        poro_mat,
+        mesh.elements,
+        mesh.nodes,
+        (U=U4,),
+        Geometric_Data
+    );
+    σ₁₁, σ₂₂, σ₁₂ = stress_strain.stress[:,1], stress_strain.stress[:,2], stress_strain.stress[:,3];
+    ϵ₁₁, ϵ₂₂, ϵ₁₂ = stress_strain.strain[:,1], stress_strain.strain[:,2], stress_strain.strain[:,3];
 
-    # plot_champ_scalaire(nodes2, mesh.elements, σ₁₁, Elem.type)
-    # plot_champ_scalaire(nodes2, mesh.elements, σ₂₂, Elem.type)
-    # plot_champ_scalaire(nodes2, mesh.elements, σ₁₂, Elem.type)
-    # plot_champ_scalaire(nodes2, mesh.elements, ϵ₁₁, Elem.type)
-    # plot_champ_scalaire(nodes2, mesh.elements, ϵ₂₂, Elem.type)
-    # plot_champ_scalaire(nodes2, mesh.elements, ϵ₁₂, Elem.type)
+    plot_champ_scalaire(nodes2, mesh.elements, σ₁₁, Elem.type)
+    plot_champ_scalaire(nodes2, mesh.elements, σ₂₂, Elem.type)
+    plot_champ_scalaire(nodes2, mesh.elements, σ₁₂, Elem.type)
+    plot_champ_scalaire(nodes2, mesh.elements, ϵ₁₁, Elem.type)
+    plot_champ_scalaire(nodes2, mesh.elements, ϵ₂₂, Elem.type)
+    plot_champ_scalaire(nodes2, mesh.elements, ϵ₁₂, Elem.type)
 
     # Compute effective piezoelectric properties
     # Compute effective stiffness
