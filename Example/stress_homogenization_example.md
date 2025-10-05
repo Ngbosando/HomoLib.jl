@@ -84,6 +84,5 @@ B = [0.492, 0.492, ~0]
 ---
 
 ## Conclusion
-- La plaque perforée **valide la capacité locale du code** (comparaison avec la référence analytique de Kirsch).  
-- L’homogénéisation poroélastique démontre la **maîtrise du calcul des propriétés effectives macroscopiques**.  
-- Ensemble, ces deux cas illustrent une expertise en **stress analysis, validation numérique et modélisation multiphysique**.  
+- La simulation de la plaque perforée reproduit correctement la solution analytique de Kirsch, avec un facteur de concentration de contraintes ≈ 3 et un minimum ≈ −1.
+- L’homogénéisation poroélastique fournit des coefficients effectifs cohérents avec les estimations analytiques.
