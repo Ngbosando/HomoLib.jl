@@ -22,8 +22,7 @@ C_eff = compute_effective_C(volume_fraction, n_inclusions, order, shape, element
 ```
 
 ## Examples
-
-- `examples/composite_homogenization.jl` - Statistical analysis of composite materials with convergence studies
+ * [Statistical analysis of composite materials with convergence studies.](https://https://github.com/Ngbosando/HomoLib.jl/blob/main/Example/sensitivity_analysis.md)
 - `examples/topology_optimization_cb.jl` - SIMP method for cantilever beam optimization (based on Sigmund's 99-line code)
 - `examples/stress_homogenization_example.md` – Validation of stress analysis (Kirsch solution for a perforated plate) and poroelastic homogenization with comparison to analytical estimates
 
