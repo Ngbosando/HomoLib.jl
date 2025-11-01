@@ -20,7 +20,6 @@ La référence analytique est donnée par la **solution de Kirsch** :
 ### Résultats
 - Minimum FEM ≈ **-0.983** (théorique -1)  
 - Maximum FEM ≈ **3.011** (théorique +3)  
-- Valeur ajustée σ∞ (méthode LS) ≈ **0.0961**  
 
 #### Figure
 ![Comparaison Kirsch FEM](/docs/images/stress_homogenization_example/kirsch_compare.png)  
