@@ -31,7 +31,7 @@ La référence analytique est donnée par la **solution de Kirsch** :
 ## 2. Homogénéisation poroélastique
 
 ### Configuration
-- **Géométrie** : cellule carrée avec inclusion circulaire (volume de vide ≈ 20%).  
+- **Géométrie** : plaque avec inclusion circulaire (volume de vide ≈ 20%).  
 - **Chargements appliqués** :  
   - ε₁₁ = 1, ε₂₂ = 0, ε₁₂ = 0  
   - ε₁₁ = 0, ε₂₂ = 1, ε₁₂ = 0  
