@@ -1,7 +1,7 @@
 name = "HomoLib"
 uuid = "3f0547c7-4dff-4613-a571-39172b441a3c"
-authors = ["Ngbosando souleyman"]
 version = "1.0.0-DEV"
+authors = ["Ngbosando souleyman"]
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
@@ -51,7 +51,7 @@ LaTeXStrings = "1.4.0"
 LinearAlgebra = "1"
 Literate = "2.20.1"
 LoopVectorization = "0.12.172"
-MAT = "0.10.7"
+MAT = "0.10.7, 0.11"
 NearestNeighbors = "0.4.22"
 PkgAuthentication = "2.2.2"
 ProgressMeter = "1.10.2"
