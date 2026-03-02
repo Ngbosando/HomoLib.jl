@@ -1,12 +1,19 @@
 [![Build Status](https://github.com/leycrimson/HomoLib.jl/actions/workflows/CI.yml/badge.svg?branch=main)]
-HomoLib.jl is a Julia library for multi-physics computational homogenization and topology optimization based on the fiThe project focuses on the development and validation of a modular FEM solver for heterogeneous materials and stru---
+# HomoLib
+
+**HomoLib.jl** is a Julia library for multi-physics computational homogenization and topology optimization based on the finite element method (FEM).
+
+The project focuses on the development and validation of a modular FEM solver for heterogeneous materials and structural optimization problems.
+
+---
+
 ## Current capabilities
 - Finite element homogenization of heterogeneous materials
 - Multi-physics support:
- - elasticity
- - thermal conduction
- - poroelasticity
- - piezoelectricity
+- elasticity
+- thermal conduction
+- poroelasticity
+- piezoelectricity
 - SIMP topology optimization with adaptive penalization
 - Statistical convergence analysis for representative volume elements
 - Validation against analytical benchmarks (Kirsch solution)
@@ -39,11 +46,9 @@ C_eff = compute_effective_C(volume_fraction, n_inclusions, order, shape, element
 - https://github.com/Ngbosando/HomoLib.jl/blob/main/Example/stress_homogenization_example.md
 ---
 ## Project goals
-HomoLib aims to provide a research-oriented FEM framework in Julia for:
-- rapid prototyping of homogenization methods
-- multi-physics material modeling
-- topology optimization research
-- numerical validation against analytical references
+HomoLib is primarily developed as a research and training framework to deepen understanding of computational homogenization, composite materials modeling, and multi-physics finite element coupling.
+
+The library serves as a testbed for validating numerical methods and exploring advanced FEM strategies in a modular Julia environment.
 ---
 ## License
 MIT
