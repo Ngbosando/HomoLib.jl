@@ -1,4 +1,4 @@
-[![Build Status](https://github.com/leycrimson/HomoLib.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://g# HomoLib
+[![Build Status](https://github.com/leycrimson/HomoLib.jl/actions/workflows/CI.yml/badge.svg?branch=main)]
 HomoLib.jl is a Julia library for multi-physics computational homogenization and topology optimization based on the fiThe project focuses on the development and validation of a modular FEM solver for heterogeneous materials and stru---
 ## Current capabilities
 - Finite element homogenization of heterogeneous materials
